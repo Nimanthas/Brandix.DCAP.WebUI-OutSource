@@ -1,0 +1,340 @@
+﻿@{
+    Layout = "_Layout";
+}
+
+<script type="text/javascript">
+    var selectedDate = null;
+    var fromdatePicker = null;
+    var todatePicker = null;
+    var scheduleObject = null;
+    var operationList = null;
+    var todayDate = null;
+    var scrapItems = [];
+    var SoberSheetMode = false;
+    var SSheetSCHNo = null;
+    var SSheetSCHId = null;
+    var SSAlreadySaved = false;
+
+    //views
+    var createNewTag = null;
+    var addItemsGrid = null;
+    var isvalidbarcode = false;
+
+    var selectedSF = null;
+    var washTypeSearchWindow = null;
+    var washTypeSearchGrid = null;
+    var sfProcessSearchGrid = null;
+    var selectedWash = null;
+
+    
+    getSessionInfo();
+
+    $(document).ready(function () {
+        $('#sitebody').removeClass('body-login');
+        $("#sitebody").append(
+            '<div id="ajaxBusy" class="ajaxBusy"></div>'
+        );
+        $("#ajaxBusy").hide();
+        checkLoginStatus();
+        $('#pageTitleBar').html('<i class="fas fa-barcode pageMainIcon"></i><span class="pageTitle">DCap - Manage Styles</span>');
+
+        initializeControls();
+        initilizeEvents();
+
+        checkIdle();
+
+        if (isValidClient == Answer.Null) {
+            window.location.href = "Login";
+        }
+        /*else if (isValidClient != null && clientconfig.dataCaptureMode != DataCaptureMode.Washing) {
+            if (clientconfig.dataCaptureMode == DataCaptureMode.Barcode) {
+                msgBox.show('මෙම යන්ත්‍රයට අප්ඩේට් කිරීම සඳහා අවසර නැත.', 'This device is not authorized for update', 'අවවාදයයි / Warning', 'BU01', 'Warning', function () {
+                    if (clientconfig.dataCaptureMode == DataCaptureMode.Barcode) {
+                        window.location.href = "Menu";
+                    }
+                });
+            }
+        }*/
+    });
+    
+    function resetControllers() {
+        $("#btnSearch").attr('disabled', 'disabled');
+    }
+
+    function getSessionInfo() {
+        isValidClient = sessionStorage.getItem("IsValidClient");
+        clientconfig = JSON.parse(sessionStorage.getItem("Clientconfig"));
+        userPermissionList = JSON.parse(sessionStorage.getItem("UserPermissionList"));
+        clientIP = sessionStorage.getItem("ClientIP");
+    }
+
+    function checkLoginStatus() {
+        if (sessionStorage.getItem("UserId") != "") {
+            $("#toolBarLoggedinUser").html(sessionStorage.getItem("UserId"));
+        } else {
+            $("#toolBarLoggedinUser").html("");
+        }
+        if (sessionStorage.getItem("IsSignedIn") == Answer.Null || sessionStorage.getItem("IsSignedIn") == Answer.No) {
+            $("#loginBar").hide();
+            window.location.href = "Login";
+        } else {
+            $("#loginBar").show();
+        }
+    }
+
+    function initializeControls() {  
+        //Style Dropdown: START
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetAllStyles',
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                $("#style").kendoDropDownList({"dataSource": response, filter: "contains","dataTextField": "l1desc","dataValueField": "l1id","optionLabel": "select a style..."});
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "ManageStyles");
+            }
+        });
+        //Style Dropdown: START
+
+        $("#status").kendoDropDownList({dataSource:[{"Text":"All","Value":"0"},
+                                                    {"Text":"Active","Value":"1"},
+                                                    {"Text":"Inactive","Value":"2"}],
+                                                    "dataTextField":"Text","dataValueField":"Value"});
+
+        //Main Table: START
+        var crudServiceBaseUrl = "@ViewBag.APIURL/BusinessLogics",
+        dataSource = new kendo.data.DataSource({
+            transport: {
+                        read: function(options) {
+                        /* implementation omitted for brevity */
+                        },
+                        destroy: function(options) {
+                            //console.log("update row data: ", JSON.stringify(options.data.models));
+                            if (true) {//userPermissionList.some(permission => permission.functionId === AccessibleFunctions.UpdateWashDetails)
+                                var tabledata = [];
+                                var valid = true;
+                                var modeldata = options.data.models;
+                                $.each(modeldata, function (index, elements) {
+                                    var tablerow = {
+                                        L1id: modeldata[index].L1id,
+                                        ModifiedBy: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                                        ModifiedMachine: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                                    }
+                                    tabledata.push(tablerow);
+                                });
+
+                                if(valid) {
+                                    $.ajax({
+                                        url: "@ViewBag.APIURL/BusinessLogics/RemoveStyleByStyleId",
+                                        type: 'POST',
+                                        dataType: "json",
+                                        //async: false,
+                                        data: JSON.stringify(tabledata),
+                                        contentType: 'application/json; charset=utf-8',
+                                        beforeSend: function () {
+                                            $("#ajaxBusy").show();
+                                        },
+                                        complete: function () {
+                                            $("#ajaxBusy").hide();
+                                        },
+                                        success: function(result) {
+                                            if(result.length != 0) {
+                                                if(result[0].saveSuccessfull == false) {
+                                                    msgBox.show(result[0].responce[0], result[0].responce[1] , 'Warning', 'BU05', 'Warning', function(){
+                                                        options.success([]);
+                                                        refreshGrid();
+                                                    });
+                                                } else {
+                                                    msgBox.show(JSON.stringify(result[0].counts), '', 'Confirm', 'B524', 'Confirm', function() {
+                                                        options.success(result);
+                                                        //refreshGrid();
+                                                    });
+                                                }
+                                            } else {
+                                                msgBox.show('යාවත්කාලීන කිරීම අසාර්ථක විය.', 'Update failed' , 'Warning', 'BU05', 'Warning', function(){
+                                                    options.success([]);
+                                                    refreshGrid();
+                                                });
+                                            }
+                                        },
+                                        error: function(result) {
+                                            formatErrorMessage(jqXHR, errorThrown, "Update Details");
+                                            options.error(result);
+                                        }
+                                    });
+                                } else {
+                                    msgBox.show('මෙම වාර්තාව යාවත්කාලීන කළ නොහැක.', 'Cannot update this record.' , 'Warning', 'BU05', 'Warning', function(){
+                                    options.success([]);
+                                    refreshGrid();
+                                });
+                                }                            
+                            } else {
+                                msgBox.show('විස්තර යාවත්කාලීන කිරීමට ඔබට අවසර නැත.', 'You do not have permission to update the style details.' , 'Warning', 'BU05', 'Warning', function(){
+                                    options.success([]);
+                                    refreshGrid();
+                                });
+                            }
+                        }
+                    },
+                    batch: true,
+                    pageSize: 5,
+                    schema: {
+                        model: {
+                            id: "Key",
+                            fields: {
+                                Key: { type: "string", editable: false, nullable: true },
+                                L1id: { type: "number", editable: false , validation: { required: true } },
+                                Style: { type: "string", editable: false , validation: { required: true } },
+                                LastTransaction: { type: "string", editable: false , validation: { required: true } },
+                                Age: { type: "number", editable: false , validation: { required: true } },
+                                RecStatus: { type: "number", editable: false , validation: { required: true } },
+                                Status: { type: "string", editable: false , validation: { required: true } },
+                                ModifiedDateTime: { type: "string", editable: false , validation: { required: true } },
+                                AchivedComments: { type: "number", editable: false , validation: { required: true } },
+                            }
+                        }
+                    }
+                });
+
+                $("#request-grid").kendoGrid({
+                    dataSource: dataSource,
+                    toolbar: ["pdf", "excel"],
+                    pdf: {
+                        allPages: true,
+                        author: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                        creator: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                        fileName: "wash detail summary",
+                    },
+                    excel: {
+                        allPages: true,
+                        fileName: "style wise wash detail summary.xlsx",
+                        filterable: true
+                    },
+                    reorderable: true,
+                    resizable: true,
+                    scrollable: true,   
+                    sortable: true,
+                    filterable: true,
+                    pageable: {
+                        refresh: true,
+                        pageSizes: true,
+                        buttonCount: 10
+                    },
+                    columns: [
+                        { field:"L1id", title: "Style Id (L1id)", width: "80px" },
+                        { field:"Style", title: "Style Name", width: "120px" },
+                        { field:"LastTransaction", title: "Last Transaction Date", width: "120px" },
+                        { field:"Age", title: "Age", width: "80px" },
+                        { field:"RecStatus", title: "Status", width: "90px", hidden: true },
+                        { field:"Status", title: "Status", width: "90px" },
+                        { field:"AchivedComments", title: "Achived Comments", width: "220px"},
+                        { field:"ModifiedDateTime", title: "Modified Date", width: "100px"},
+                        { command: ["delete"], title: "&nbsp;", width: "80px" }],
+                    editable: "popup"
+                });
+            //Main Table: END
+    }
+
+    function initilizeEvents() {
+        
+    }
+
+    function refreshGrid() {
+            $("#request-grid").data('kendoGrid').dataSource.data([]);
+            $.ajax({
+                url: "@ViewBag.APIURL/dashBoard/GetStyleStatustoAchival?Style=" + ($("#style").val() != "" ? $("#style").val() : 0) + "&RecStatus=" + $("#status").val(),
+                type: 'GET',
+                dataType: 'json',
+                //async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {
+                    //console.log(response);
+                    if(response.length != 0){
+                        gridData = [];
+                        $.each(response, function (index, elements) {
+                            var object = {
+                                Key: elements.l1id,
+                                L1id: elements.l1id,
+                                Style: elements.l1desc,
+                                LastTransaction: elements.recStatus == 2 ? "" : elements.modifiedDateTime,
+                                Age: elements.recStatus == 2 ? "" : elements.l1status,
+                                Status: (elements.recStatus == 1 ? "Avtive (" : "Inactive (") + elements.recStatus + ")",
+                                RecStatus: elements.recStatus,
+                                AchivedComments: elements.achivedComments,
+                                ModifiedDateTime: elements.createdDateTime
+                            }
+                            gridData.push(object);
+                            //console.log("row data :", object);
+                        });
+                        $("#request-grid").data('kendoGrid').dataSource.data(gridData);
+                    } else {
+
+                    }
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "ManageStyles");
+                }
+            });
+    }
+</script>
+
+
+<div>
+    <div style="margin-top: 5px; margin-left: 5px;">
+        <!--FILTER: BEGIN -->
+        <div style="margin: 5px; ">
+            <div>
+                <div style="float: left; height: 45px; margin-right: 10px;" id="style-filter">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold; font-size: 17px;">
+                        <label for="style">
+                            Style
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="style" class="bu-form-control" style="width: 210px; font-size: 17px !important;"/>
+                    </div>
+                </div>
+                <div style="float: left; height: 45px; margin-right: 10px;" id="style-filter">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold; font-size: 17px;">
+                        <label for="status">
+                            Status
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="status" class="bu-form-control" style="width: 210px; font-size: 17px !important;"/>
+                    </div>
+                </div>
+            </div>
+            <div style="clear: both;">
+                <div style="float: left; height: 35px; margin-right: 10px; margin-bottom: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; visibility: hidden;">
+                        Invisible text
+                    </div>
+                    <div style="float: left;">
+                        <button id="filterGatePassRequestButton" class="k-button" style="width: 180px; padding-left: 5px; background-color: green; border: none; font-size: 17px; font-weight: 600; color: #000000;" onclick="refreshGrid()">
+                            <span class="k-icon k-i-search" style="margin-right: 7px; text-align:left;"></span><span>Search</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!--FILTER: END -->
+
+    <!--DETAILS PAGE GRID: BEGIN -->
+    <div id="request-grid" style="clear: both; padding-top: 5px;">
+</div>

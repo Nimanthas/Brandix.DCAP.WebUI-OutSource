@@ -1,0 +1,236 @@
+﻿@{
+    Layout = "_Layout";
+}
+
+<script type="text/javascript">
+
+    var packingListTable = null;
+    var rowdata = null;
+
+    getSessionInfo();
+
+    $(document).ready(function () {
+        $('#sitebody').removeClass('body-login');
+        $("#sitebody").append(
+            '<div id="ajaxBusy" class="ajaxBusy"></div>'
+        );
+        $("#ajaxBusy").hide();
+        checkLoginStatus();
+        $('#pageTitleBar').html('<i class="fas fa-barcode pageMainIcon"></i><span class="pageTitle">DCap - Update Outsource Order Details</span>');
+
+        initializeControls();
+
+        checkIdle();
+
+        if (isValidClient == Answer.Null) {
+            window.location.href = "Login";
+        }
+        else if (isValidClient != null && clientconfig.dataCaptureMode != DataCaptureMode.Bulk) {
+            if (clientconfig.dataCaptureMode == DataCaptureMode.Barcode) {
+                msgBox.show('මෙම යන්ත්‍රයට අප්ඩේට් කිරීම සඳහා අවසර නැත.', 'This device is not authorized for Bulk update', 'අවවාදයයි / Warning', 'BU01', 'Warning', function () {
+                    if (clientconfig.dataCaptureMode == DataCaptureMode.Washing) {
+                        window.location.href = "Menu";
+                    }
+                });
+            }
+        }
+    });
+
+    
+    function checkLoginStatus() {
+        if (sessionStorage.getItem("UserId") != "") {
+            $("#toolBarLoggedinUser").html(sessionStorage.getItem("UserId"));
+        } else {
+            $("#toolBarLoggedinUser").html("");
+        }
+        if (sessionStorage.getItem("IsSignedIn") == Answer.Null || sessionStorage.getItem("IsSignedIn") == Answer.No) {
+            $("#loginBar").hide();
+            window.location.href = "Login";
+        } else {
+            $("#loginBar").show();
+        }
+    }
+
+    function initializeControls() {  
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetUsersByFunction?FunctionId=' + AccessibleDispatchFunctions.CreateGatepass,
+            type: 'GET',
+            dataType: 'json',
+            async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                $("#CreatedByFilter").kendoDropDownList({"dataSource": response, filter: "contains","dataTextField": "userName","dataValueField": "userId","optionLabel": "Select a user..."});
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Dispatch");
+            }
+        });
+
+        $("#packingListTable").kendoSpreadsheet({
+            excel: {
+                // Required to enable Excel Export in some browsers
+                    proxyURL: "https://demos.telerik.com/kendo-ui/service/export"
+            },
+            toolbar: {
+                home: [
+                    // for all available options, see the toolbar items configuration
+                    // https://docs.telerik.com/kendo-ui/api/javascript/ui/toolbar/configuration/items
+                    "open",
+                    "exportAs",
+                    "freeze",
+                    "filter",
+                    {
+                        type: "button",
+                        text: "Upload Data",
+                        showText: "both",
+                        icon: "k-icon k-i-upload",
+                        click: function() {
+                            upload();
+                        }
+                    }
+                ],
+                insert: [ ["deleteColumn", "deleteRow"] ],
+            }
+        });
+
+        packingListTable = $("#packingListTable").data("kendoSpreadsheet");
+    }
+    //end
+
+    function getSessionInfo() {
+        isValidClient = sessionStorage.getItem("IsValidClient");
+        clientconfig = JSON.parse(sessionStorage.getItem("Clientconfig"));
+        userPermissionList = JSON.parse(sessionStorage.getItem("UserPermissionList"));
+        clientIP = sessionStorage.getItem("ClientIP");
+    }
+
+    function getrowdata() {
+        packingListTable = $("#packingListTable").data("kendoSpreadsheet");
+        //window.alert(JSON.stringify(packingListTable.toJSON().sheets[0]));
+
+        var rows = packingListTable.toJSON().sheets[0].rows;
+        if(rows.length != 0) {
+            rowdata = rows;
+        }
+    }
+
+    function upload() {
+        packingListTable = $("#packingListTable").data("kendoSpreadsheet");
+
+        var rows = packingListTable.toJSON().sheets[0].rows;
+        //window.alert(JSON.stringify(rows));
+
+        if(rows.length != 0) {
+            var columnscells = rows[0].cells;
+            if(columnscells.length != 0) {
+                var tableData = [];
+
+                for (var i = 1; i < rows.length; i++) {
+                    var cells = rows[i].cells;
+                    if(cells.length != 0) {
+                        var tablerow = {};
+                        for (var j = 0; j < cells.length; j++) {
+                            tablerow[columnscells[j].value] = cells[j].value;
+                        }
+                        if(tablerow != {}) {
+                            tableData.push(tablerow);
+                        }
+                    }
+                }
+
+                window.alert(JSON.stringify(tableData));
+            }
+        }
+    }
+
+</script>
+
+
+<div>
+    <div class="row">
+        <div style="margin: 5px; margin-top: 14px;">
+            <div>
+                <div style="float: left; height: 35px; margin-right: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                        <label for="DateCreatedFilter">
+                            Group
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="DateCreatedFilter" class="bu-form-control" style="width:180px; height: 29px; border-radius: 4px;"/>
+                    </div>
+                </div>
+                <div style="float: left; height: 35px; margin-right: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                        <label for="MonthFilter">
+                            SBU
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="MonthFilter" class="bu-form-control" style="width:180px; height: 29px; border-radius: 4px;"/>
+                    </div>
+                </div>
+                <div style="float: left; height: 35px; margin-right: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                        <label for="StatusFilter">
+                            Reference No.
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="Ref" class="bu-form-control" style="width:180px; height: 29px; border-radius: 4px;"/>
+                    </div>
+                </div>
+                <div style="float: left; height: 35px; margin-right: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                        <label for="LocationToFilter">
+                            Approval
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="App" class="bu-form-control" style="width:180px; height: 29px; border-radius: 4px;"/>
+                    </div>
+                </div>
+                <div style="float: left; height: 35px; margin-right: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                        <label for="CreatedByFilter">
+                            Created By
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <div id="CreatedByFilter" class="bu-form-control" style="width:180px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div>
+            <div style="clear: both;">
+                <div style="float: left; height: 35px; margin-right: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; visibility: hidden;">
+                        Invisible text
+                    </div>
+                    <div style="float: left; padding-left: 5px;">
+                        <button id="filterGatePassRequestButton" class="k-button" style="width: 180px; padding-left: 5px; background-color: green; border: none; font-size: 17px; font-weight: 600; color: #000000;" onclick="RefreshRequestGrid()">
+                            <span class="k-icon k-i-search" style="margin-right: 7px; text-align:left;"></span><span>Search</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div id="example">
+            <div id="packingListTable" style="width: 100%;"></div>
+        </div>
+    </div>
+</div>
+
+
+<style>
+    .download { width: 260px; }
+</style>

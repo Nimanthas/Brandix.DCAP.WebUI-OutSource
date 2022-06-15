@@ -1,0 +1,825 @@
+﻿@{
+    Layout = "_Layout";
+}
+
+<script type="text/javascript">
+    var selectedDate = null;
+    var fromdatePicker = null;
+    var todatePicker = null;
+    var scheduleObject = null;
+    var operationList = null;
+    var todayDate = null;
+    var scrapItems = [];
+    var SoberSheetMode = false;
+    var SSheetSCHNo = null;
+    var SSheetSCHId = null;
+    var SSAlreadySaved = false;
+
+    //views
+    var createNewTag = null;
+    var addItemsGrid = null;
+    var isvalidbarcode = false;
+
+    var selectedSF = null;
+    var washTypeSearchWindow = null;
+    var washTypeSearchGrid = null;
+    var sfProcessSearchGrid = null;
+    var selectedWash = null;
+
+    
+    getSessionInfo();
+
+    $(document).ready(function () {
+        $('#sitebody').removeClass('body-login');
+        $("#sitebody").append(
+            '<div id="ajaxBusy" class="ajaxBusy"></div>'
+        );
+        $("#ajaxBusy").hide();
+        checkLoginStatus();
+        $('#pageTitleBar').html('<i class="fas fa-barcode pageMainIcon"></i><span class="pageTitle">DCap - Barcode Operation Scan History</span>');
+
+        initializeControls();
+        initilizeEvents();
+
+        checkIdle();
+
+        if (isValidClient == Answer.Null) {
+            window.location.href = "Login";
+        }
+        else if (isValidClient != null && clientconfig.dataCaptureMode != DataCaptureMode.Bulk) {
+            if (clientconfig.dataCaptureMode == DataCaptureMode.Barcode) {
+                msgBox.show('මෙම යන්ත්‍රයට බල්ක් අප්ඩේට් කිරීම සඳහා අවසර නැත.', 'This device is not authorized for Bulk update', 'අවවාදයයි / Warning', 'BU01', 'Warning', function () {
+                    if (clientconfig.dataCaptureMode == DataCaptureMode.Barcode) {
+                        window.location.href = "Menu";
+                    }
+                });
+            }
+        }
+    });
+    
+    function resetControllers() {
+        $("#btnSearch").attr('disabled', 'disabled');
+        $("#btnSearch").attr('disabled', 'disabled');
+        $("#btnSearch").attr('disabled', 'disabled');
+    }
+
+    function getSessionInfo() {
+        isValidClient = sessionStorage.getItem("IsValidClient");
+        clientconfig = JSON.parse(sessionStorage.getItem("Clientconfig"));
+        userPermissionList = JSON.parse(sessionStorage.getItem("UserPermissionList"));
+        clientIP = sessionStorage.getItem("ClientIP");
+    }
+
+    function checkLoginStatus() {
+        if (sessionStorage.getItem("UserId") != "") {
+            $("#toolBarLoggedinUser").html(sessionStorage.getItem("UserId"));
+        } else {
+            $("#toolBarLoggedinUser").html("");
+        }
+        if (sessionStorage.getItem("IsSignedIn") == Answer.Null || sessionStorage.getItem("IsSignedIn") == Answer.No) {
+            $("#loginBar").hide();
+            window.location.href = "Login";
+        } else {
+            $("#loginBar").show();
+        }
+    }
+
+    function initializeControls() {  
+        console.log(sessionStorage, JSON.parse(sessionStorage.getItem("Clientconfig")));
+
+        //Hide Filters
+        $("#color-filter").hide();
+        $("#shedule-filter").hide();
+        console.log("outputs :", $("#style").val(), $("#shedule").val(), $("#color").val())
+
+        //Style Dropdown: START
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetAllStyles',
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                $("#style").kendoDropDownList({"dataSource": response, change: function(e) {loadShedule(this.value())}, filter: "contains","dataTextField": "l1desc","dataValueField": "l1id","optionLabel": "select a style..."});
+                loadShedule();
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "FindBarcodeOperationHistory");
+            }
+        });
+        //Style Dropdown: START
+
+        //Main Table: START
+        var crudServiceBaseUrl = "@ViewBag.APIURL/BusinessLogics",
+        dataSource = new kendo.data.DataSource({
+                    batch: true,
+                    pageSize: 5,
+                    schema: {
+                        model: {
+                            id: "Key",
+                            fields: {
+                                Key: { type: "string" },
+                                L1: { type: "number" },
+                                Style: { type: "string" },
+                                L2: {type: "number" },
+                                Shedule: { type: "string" },
+                                PO: { type: "string" },
+                                Zfeature: { type: "string" },
+                                L4: { type: "number" },
+                                Color: { type: "string" },
+                                L5: { type: "number" },
+                                Size: { type: "string" },
+                                BarcodeNo: { type: "string" },
+                                Color: { type: "string" },
+                                BagBarCodeNo: { type: "string" },
+                                TravelBarCodeNo: { type: "string" },
+
+                                G130 : { type: "number" },
+                                S130 : { type: "number" },
+                                R130 : { type: "number" },
+
+                                G131 : { type: "number" },
+                                S131 : { type: "number" },
+                                R131 : { type: "number" },
+
+                                G151 : { type: "number" },
+                                S151 : { type: "number" },
+                                R151 : { type: "number" },
+
+                                G155 : { type: "number" },
+                                S155 : { type: "number" },
+                                R155 : { type: "number" },
+                                
+                                G160 : { type: "number" },
+                                S160 : { type: "number" },
+                                R160 : { type: "number" },
+                                
+                                G180 : { type: "number" },
+                                S180 : { type: "number" },
+                                R180 : { type: "number" },
+                                
+                                G190 : { type: "number" },
+                                S190 : { type: "number" },
+                                R190 : { type: "number" },
+                                
+                                G200 : { type: "number" },
+                                S200 : { type: "number" },
+                                R200 : { type: "number" },
+                            }
+                        }
+                    }
+                });
+
+                $("#request-grid").kendoGrid({
+                    dataSource: dataSource,
+                    toolbar: ["pdf", "excel"],
+                    pdf: {
+                        allPages: true,
+                        author: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                        creator: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                        fileName: "Barcode History",
+                    },
+                    excel: {
+                        allPages: true,
+                        fileName: "Barcode History.xlsx",
+                        filterable: true
+                    },
+                    reorderable: true,
+                    resizable: true,
+                    scrollable: true,     
+                    sortable: true,
+                    filterable: true,
+                    pageable: {
+                        refresh: true,
+                        pageSizes: [15, 30, 45, 60],
+                        pageSize: 15,
+                        buttonCount: 10
+                    },
+                    columns: [
+                        { field:"Style", title: "Style Name", width: "120px" },
+                        { field:"Shedule", title: "Shedule", width: "120px" },
+                        { field:"PO", title: "PO", width: "120px" },
+                        { field:"Zfeature", title: "Z-feature", width: "120px" },
+                        { field:"Color", title: "Color", width: "170px" },
+                        { field:"Size", title: "Size", width: "170px" },
+                        { field:"BarcodeNo", title: "Barcode No", width: "170px" },
+                        { field:"BagBarCodeNo", title: "BagBarCode No", width: "190px" },
+                        { field:"TravelBarCodeNo", title: "TravelBarCode No", width: "210px" },
+                        { title: "Operation History", width: "170px", columns: [
+                            { title: "Sweing Out [130]", width: "330px", columns: [
+                                { title: "GOOD", field: "G130", width: "110px" },
+                                { title: "SCRAP", field: "S130", width: "110px" },
+                                { title: "REWORK", field: "R130", width: "110px" },
+                            ]},
+                            { title: "Sweing Out [131]", width: "330px", columns: [
+                                { title: "GOOD", field: "G131", width: "110px" },
+                                { title: "SCRAP", field: "S131", width: "110px" },
+                                { title: "REWORK", field: "R131", width: "110px" },
+                            ]},
+                            { title: "Washing Send [151]", width: "330px", columns: [
+                                { title: "GOOD", field: "G151", width: "110px" },
+                                { title: "SCRAP", field: "S151", width: "110px" },
+                                { title: "REWORK", field: "R151", width: "110px" },
+                            ]},
+                            { title: "BFL Washing Receive [155]", width: "330px", columns: [
+                                { title: "GOOD", field: "G155", width: "110px" },
+                                { title: "SCRAP", field: "S155", width: "110px" },
+                                { title: "REWORK", field: "R155", width: "110px" },
+                            ]},
+                            { title: "Washing Receive [160]", width: "330px", columns: [
+                                { title: "GOOD", field: "G160", width: "110px" },
+                                { title: "SCRAP", field: "S160", width: "110px" },
+                                { title: "REWORK", field: "R160", width: "110px" },
+                            ]},
+                            { title: "Finishing In  [180]", width: "330px", columns: [
+                                { title: "GOOD", field: "G180", width: "110px" },
+                                { title: "SCRAP", field: "S180", width: "110px" },
+                                { title: "REWORK", field: "R180", width: "110px" },
+                            ]},
+                            { title: "Poly Bag Packing [190]", width: "330px", columns: [
+                                { title: "GOOD", field: "G190", width: "110px" },
+                                { title: "SCRAP", field: "S190", width: "110px" },
+                                { title: "REWORK", field: "R190", width: "110px" },
+                            ]},
+                            { title: "Carton Packing [200]", width: "330px", columns: [
+                                { title: "GOOD", field: "G200", width: "110px" },
+                                { title: "SCRAP", field: "S200", width: "110px" },
+                                { title: "REWORK", field: "R200", width: "110px" },
+                            ]},
+                        ]},
+                    ]
+                });
+            //Main Table: END
+    }
+
+    function initilizeEvents() {
+        
+    }
+
+    function loadShedule(style) {
+        console.log("outputs :", $("#style").val(), $("#shedule").val(), $("#color").val())
+        console.log(style);
+        $("#color-filter").hide();
+        if(style == undefined || style == null || style == "") {
+        } else {
+            $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetAllShedules?l1=' + style,
+                type: 'GET',
+                dataType: 'json',
+                //async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {
+                    $("#shedule-filter").show();
+                    $("#shedule").kendoDropDownList({"dataSource": response, change: function(e) {loadColor(style, this.value())}, filter: "contains","dataTextField": "l2desc","dataValueField": "l2id","optionLabel": "select a shedule..."});
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "FindBarcodeOperationHistory");
+                }
+            });
+        }
+    }
+
+    function loadColor(style, color) {
+        console.log("outputs :", $("#style").val(), $("#shedule").val(), $("#color").val())
+        console.log(style, color);
+        if(color == undefined || color == null || color == "") {
+        } else {
+            $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetAllColors?l1=' + style + '&l2=' + color,
+                type: 'GET',
+                dataType: 'json',
+                //async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {    
+                    $("#color-filter").show();
+                    $("#color").kendoDropDownList({"dataSource": response, filter: "contains","dataTextField": "l4desc","dataValueField": "l4id","optionLabel": "select a color..."});
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "FindBarcodeOperationHistory");
+                }
+            });
+        }
+    }
+
+    function refreshGrid() {
+        if($("#style").val() == undefined || $("#shedule").val() == undefined  || $("#color").val() == undefined  ) {
+
+        } else {
+            $("#request-grid").data('kendoGrid').dataSource.data([]);
+            $.ajax({
+                url: "@ViewBag.APIURL/DashBoard/GetBarcodeOperationScanStatus?L1id=" + ($("#style").val() != "" ? $("#style").val() : 0) + "&L2id=" + ($("#shedule").val() != "" ? $("#shedule").val() : 0) + "&L4id=" + ($("#color").val() != "" ? $("#color").val() : 0),
+                type: 'GET',
+                dataType: 'json',
+                //async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {
+                    console.log(response);
+                    if(response.length != 0) {
+                        gridData = [];
+                        $.each(response, function (index, elements) {
+                            var object = {
+                                Key: elements.key,
+                                L1: elements.styleId,
+                                Style: elements.styleNo,
+                                L2: elements.scheduleId,
+                                Shedule: elements.scheduleNo,
+                                PO: elements.poNo,
+                                Zfeature: elements.zfeature,
+                                L4: elements.colorId,
+                                Color: elements.colorDesc,
+                                L5: elements.sizeId,
+                                Size: elements.sizeDesc,
+                                BarcodeNo: elements.barcode,
+
+                                BagBarCodeNo: elements.bagBarCodeNo,
+                                TravelBarCodeNo: elements.travelBarCodeNo,
+                                
+                                G130: elements.qty.G130,
+                                S130: elements.qty.S130,
+                                R130: elements.qty.R130,
+
+                                G131: elements.qty.G131,
+                                S131: elements.qty.S131,
+                                R131: elements.qty.R131,
+                                
+                                G155: elements.qty.G155,
+                                S155: elements.qty.S155,
+                                R155: elements.qty.R155,
+                                
+                                G151: elements.qty.G151,
+                                S151: elements.qty.S151,
+                                R151: elements.qty.R151,
+                                
+                                G160: elements.qty.G160,
+                                S160: elements.qty.S160,
+                                R160: elements.qty.R160,
+                                
+                                G180: elements.qty.G180,
+                                S180: elements.qty.S180,
+                                R180: elements.qty.R180,
+                                
+                                G190: elements.qty.G190,
+                                S190: elements.qty.S190,
+                                R190: elements.qty.R190,
+                                
+                                G200: elements.qty.G200,
+                                S200: elements.qty.S200,
+                                R200: elements.qty.R200,
+                            }
+                            gridData.push(object);
+                            //console.log("row data :", object);
+                        });
+                        $("#request-grid").data('kendoGrid').dataSource.data(gridData);
+                    } else {
+
+                    }
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "FindBarcodeOperationHistory");
+                }
+            });
+        }
+    }
+
+    function OnGridDataBound(e) {
+        var grid = $("#request-grid").data().kendoGrid; 
+        var gridData = grid.dataSource.view();
+
+        for (var i = 0; i < gridData.length; i++) {
+            var currentUid = gridData[i].uid;
+            if (gridData[i].success == true) {
+                var currentRow = grid.table.find("tr[data-uid='" + currentUid + "']");
+                currentRow.css('background-color', 'lightgreen');
+            }
+        }
+
+        var grid = e.sender;
+        var rows = grid.tbody.find("[role='row']");
+
+        rows.unbind("click");
+        rows.on("click", onClick)
+    }
+
+    function onClick(e) {
+        if ($(e.target).hasClass("k-checkbox-label")) {
+            return;
+        }
+        var row = $(e.target).closest("tr");
+        var checkbox = $(row).find(".k-checkbox");
+
+        checkbox.click();
+    };
+
+    //Grid Controllers: START
+    function customEditorMode(container, options) {
+        $('<input id="modeprocess-dropdown" name="ApplyMode" class="k-input" style="width:180px background-color: #f4511e85;"/>').appendTo(container);
+        loadModehProcess();
+    }
+
+    function loadModehProcess() {
+        $("#modeprocess-dropdown").kendoDropDownList({"dataSource":[{"Text":"Color (Default)","Value":"4"},
+                                                                {"Text":"Style + Color","Value":"3"},
+                                                                {"Text":"Style + Shedule","Value":"2"},
+                                                                {"Text":"Style","Value":"1"}],
+                                                                "dataTextField":"Text","dataValueField":"Value"});
+        $("#modeprocess-dropdown").val(4);
+    }
+
+    function customEditorWashDescriptionText(container, options) {
+        $('<textarea class="k-textbox" cols="20" id="address" name="WashDescription" rows="2" style="width:200px;">').appendTo(container);
+    }
+
+    function customEditorWashTypeText(container, options) {
+        $('<input id="washtype-dropdown" name="WashType" class="k-input" style="width:180px background-color: #f4511e85;"/>').appendTo(container);
+        loadWashType();
+    }
+
+    function loadWashType() {
+        $("#washtype-dropdown").kendoDropDownList({"dataSource":[{"Text":"Wash","Value":"Wash"},
+                                                                {"Text":"Wash+SF","Value":"Wash+SF"},
+                                                                {"Text":"Dye","Value":"Dye"},
+                                                                {"Text":"Dye+SF","Value":"Dye+SF"}],
+                                                                "dataTextField":"Text","dataValueField":"Value"});
+        $("#washtype-dropdown").val(1);
+    }
+
+    function customEditorSFProcessText(container, options){
+        $('<input id="WashProcess" class="k-input" name="WashProcess" style="width:180px; border: none;" readonly/>').appendTo(container);
+    }
+
+    function customEditorSFProcess(container, options) {
+        $('<div><input id="sfprocess" class="k-input" name="WashProcessID" style="width:180px; border: none;" readonly/><button id="searchforSFProcess" class="k-button" onClick="selectSFProcess()" style="width: 35px; padding-left: 5px; background-color: #FFA000; border: none; font-size: 17px; font-weight: 600; color: #000000;"><i class="fas fa-search"></button></div>').appendTo(container);
+    }
+
+    function customEditorWashProcessText(container, options) {
+        $('<input id="washprocess-text" class="k-input" name="WashType" style="width:180px; border: none;"/>').appendTo(container);
+    }
+
+    function customEditorWashProcess(container, options) {
+        console.log((container, options));
+        $('<div><input id="washprocess" class="k-input" name="WashTypeID" style="width:180px; border: none;" readonly/><button id="searchforWashProcess" class="k-button" onClick="selectWashProcess()" style="width: 35px; padding-left: 5px; background-color: #FFA000; border: none; font-size: 17px; font-weight: 600; color: #000000;"><i class="fas fa-search"></button></div>').appendTo(container);
+        loadWashProcess();
+    }
+
+    function loadWashProcess() {
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetAllWashes',
+            type: 'GET',
+            dataType: 'json',
+            async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                //console.log("All washes dropdown data", response);   
+                $("#washprocess-dropdown").kendoDropDownList({"dataSource": response, filter: "contains","dataTextField": "washName","dataValueField": "washCatId","optionLabel": "select a wash..."});
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "FindBarcodeOperationHistory");
+            }
+        });
+    }
+
+    //Grid Popup Windows: START
+    //SF Process: START
+    function selectSFProcess() {
+            sfProcessSearchWindow = $("#sfProcessSearchWindow").kendoWindow({
+                    width: "80%",
+                    height: "60%",
+                    title: "SF Process Search",
+                    visible: false,
+                    actions: [
+                        "Close"
+                    ],
+                    modal: true,
+                    resizable: false,
+                    draggable: false,
+                    pinned: true,
+                    activate: function () {
+                        $("#sfProcessSearchWindowTxt").select();
+                    },
+                    open: function (e) { $("html, body").css("overflow", "hidden"); },
+                    close: onSFPRocessSearchClose
+                }).data("kendoWindow");
+
+            sfProcessSearchWindow.wrapper.find('.k-window-titlebar').css({
+                    'background-color': 'black',
+                    'font-size': '18px',
+                    'color': 'white'
+            });
+
+                sfProcessSearchGrid = $("#sfProcessSearchGrid").kendoGrid({
+                    autoBind: true,
+                    dataSource: {
+                        transport: {
+                            read: {
+                                url: '@ViewBag.APIURL/Lookup/GetAllSFProcess',
+                                type: 'GET',
+                                dataType: 'json',
+                                async: false,
+                                contentType: 'application/json; charset=utf-8'
+                            }
+                        },
+                        schema: {
+                            model: {
+                                fields: {
+                                    sfCatId: { type: "string" },
+                                    sfName: { type: "string" },
+                                }
+                            }
+                        }
+                    },
+                    height: "75%",
+                    width: "90%",
+                    scrollable: true,
+                    change: onChangeSFProcess,
+                    navigatable: true,
+                    selectable: "multiple cell",
+                    dataBound: function (e) {
+                        var cell = this.tbody.find("tr[role='row'] td:first");
+                        this.current(cell);
+                    },
+                    columns: [
+                        { field: "sfCatId", title: "SF Code", width: "10%" },
+                        { field: "sfName", title: "SF Name", width: "70%" }
+                    ]
+                }).data("kendoGrid");
+
+                var arrows = [38, 40];
+                sfProcessSearchGrid.table.on("keydown", function (e) {
+                    if (arrows.indexOf(e.keyCode) >= 0) {
+                        setTimeout(function () {
+                            sfProcessSearchGrid.select($("#rowSelection_active_cell").closest("tr"));
+                        }, 10);
+                    }
+                });
+
+                sfProcessSearchWindow.one("activate", function () {
+                    sfProcessSearchGrid.resize();
+                }); 
+                sfProcessSearchWindow.open().center();
+                $("#sfProcessSearchWindowTxt").keydown(function (e) {
+                    if (e.keyCode == 13) {
+                        sfProcessSearchGrid.table.focus();
+                    }
+                });
+
+                $("#sfProcessSearchWindowTxt").keyup(function () {
+                    sfProcessSearchGrid.dataSource.read({ SFName: $("#sfProcessSearchWindowTxt").val() });
+                });
+    }
+
+    function onSFPRocessSearchClose() {
+        if ($("#sfProcessSearchWindowTxt").val().length = 0) {
+            selectedSF = null;
+        }
+        if (selectedSF != null) {
+            console.log(selectedSF);
+            $("#sfprocess").val(selectedSF.sfCatId);
+            $("#WashProcess").val(selectedSF.sfName);
+        }
+        else {
+            //$("#sfprocess").val("");
+            //$("#sfprocess-text").val("");
+        }
+        $("#sfProcessSearchWindowTxt").val("");
+        sfProcessSearchGrid.dataSource.data([]);
+    }
+
+    function onChangeSFProcess(arg) {
+        var row = $(this.select()).closest("tr");
+        var dataItem = sfProcessSearchGrid.dataItem(row);
+        selectedSF = dataItem;
+        sfProcessSearchGrid.dataSource.data([]);
+        $("#sfProcessSearchWindow").data("kendoWindow").close();
+    }
+    //SF Process: END
+
+    //Wash Type: START
+    function selectWashProcess() {
+            washTypeSearchWindow = $("#washTypeSearchWindow").kendoWindow({
+                    width: "80%",
+                    height: "60%",
+                    title: "Wash Type Search",
+                    visible: false,
+                    actions: [
+                        "Close"
+                    ],
+                    modal: true,
+                    resizable: false,
+                    draggable: false,
+                    pinned: true,
+                    activate: function () {
+                        $("#washTypeSearchWindowTxt").select();
+                    },
+                    open: function (e) { $("html, body").css("overflow", "hidden"); },
+                    close: onWashPRocessSearchClose
+                }).data("kendoWindow");
+
+            washTypeSearchWindow.wrapper.find('.k-window-titlebar').css({
+                    'background-color': 'black',
+                    'font-size': '18px',
+                    'color': 'white'
+            });
+
+                washTypeSearchGrid = $("#washTypeSearchGrid").kendoGrid({
+                    autoBind: true,
+                    dataSource: {
+                        transport: {
+                            read: {
+                                url: '@ViewBag.APIURL/Lookup/GetAllWashes',
+                                type: 'GET',
+                                dataType: 'json',
+                                async: false,
+                                contentType: 'application/json; charset=utf-8'
+                            }
+                        },
+                        schema: {
+                            model: {
+                                fields: {
+                                    washCatId: { type: "string" },
+                                    washName: { type: "string" },
+                                }
+                            }
+                        }
+                    },
+                    height: "75%",
+                    width: "90%",
+                    scrollable: true,
+                    change: onChangeWashProcess,
+                    navigatable: true,
+                    selectable: "multiple cell",
+                    dataBound: function (e) {
+                        var cell = this.tbody.find("tr[role='row'] td:first");
+                        this.current(cell);
+                    },
+                    columns: [
+                        { field: "washCatId", title: "Wash Code", width: "10%" },
+                        { field: "washName", title: "Wash Name", width: "70%" }
+                    ]
+                }).data("kendoGrid");
+
+                var arrows = [38, 40];
+                washTypeSearchGrid.table.on("keydown", function (e) {
+                    if (arrows.indexOf(e.keyCode) >= 0) {
+                        setTimeout(function () {
+                            sfProcessSearchGrid.select($("#rowSelection_active_cell").closest("tr"));
+                        }, 10);
+                    }
+                });
+
+                washTypeSearchWindow.one("activate", function () {
+                    washTypeSearchGrid.resize();
+                }); 
+                washTypeSearchWindow.open().center();
+                $("#washTypeSearchWindowTxt").keydown(function (e) {
+                    if (e.keyCode == 13) {
+                        washTypeSearchGrid.table.focus();
+                    }
+                });
+
+            $("#washTypeSearchWindowTxt").keyup(function () {
+                washTypeSearchGrid.dataSource.read({ WashName: $("#washTypeSearchWindowTxt").val() });
+            });
+    }
+
+    function onWashPRocessSearchClose() {
+        if ($("#washTypeSearchWindowTxt").val().length = 0) {
+            selectedWash = null;
+        }
+        if (selectedWash != null) {
+            console.log(selectedWash);
+            $("#washprocess").val(selectedWash.washCatId);
+            $("#washprocess-text").val(selectedWash.washName);
+        }
+        else {
+            //$("#washprocess").val("");
+            //$("#washprocess-text").val("");
+        }
+        $("#washTypeSearchWindowTxt").val("");
+        washTypeSearchGrid.dataSource.data([]);
+    }
+
+    function onChangeWashProcess(arg) {
+        var row = $(this.select()).closest("tr");
+        var dataItem = washTypeSearchGrid.dataItem(row);
+        selectedWash = dataItem;
+        washTypeSearchGrid.dataSource.data([]);
+        $("#washTypeSearchWindow").data("kendoWindow").close();
+    }
+    //Wash Type: END
+
+    //
+
+    //Grid Controllers: END
+</script>
+
+
+<div>
+    <div style="margin-top: 5px; margin-left: 5px;">
+        <!--FILTER: BEGIN -->
+        <div style="margin: 5px; ">
+            <div>
+                <div style="float: left; height: 45px; margin-right: 10px;" id="style-filter">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold; font-size: 17px;">
+                        <label for="style">
+                            Style
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="style" class="bu-form-control" style="width: 210px; font-size: 17px !important;"/>
+                    </div>
+                </div>
+                <div style="float: left; height: 35px; margin-right: 10px;" id="shedule-filter">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold; font-size: 17px;">
+                        <label for="shedule">
+                            Shedule
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="shedule" class="bu-form-control" style="width: 210px; font-size: 17px !important;"/>
+                    </div>
+                </div>
+                <div style="float: left; height: 35px; margin-right: 10px;" id="color-filter">
+                    <div style="float: left; width: 150px; margin-right: 10px; text-align: right; font-weight: bold; font-size: 17px;">
+                        <label for="color">
+                            Color
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="color" class="bu-form-control" style="width: 210px; font-size: 17px !important;"/>
+                    </div>
+                </div>
+                <!--<div style="float: left; height: 35px; margin-right: 10px;" id="color-filter">
+                    <div style="float: left; width: 150px; margin-right: 10px; text-align: right; font-weight: bold;">
+                        <label for="status">
+                            Status
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="status" class="bu-form-control" style="width:180px"/>
+                    </div>
+                </div>-->
+            </div>
+            <div style="clear: both;">
+                <div style="float: left; height: 35px; margin-right: 10px; margin-bottom: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; visibility: hidden;">
+                        Invisible text
+                    </div>
+                    <div style="float: left;">
+                        <button id="filterGatePassRequestButton" class="k-button" style="width: 180px; padding-left: 5px; background-color: green; border: none; font-size: 17px; font-weight: 600; color: #000000;" onclick="refreshGrid()">
+                            <span class="k-icon k-i-search" style="margin-right: 7px; text-align:left;"></span><span>Search</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!--FILTER: END -->
+
+    <!--DETAILS PAGE GRID: BEGIN -->
+    <div id="request-grid" style="clear: both; padding-top: 5px;">
+</div>
+
+<!-- Wash Process Select Window: START -->
+<div id="sfProcessSearchWindow" class="styleSearchWindow" hidden="hidden">
+    <input type="text" class="form-control" placeholder="Enter Process" id="sfProcessSearchWindowTxt" style="width:25%">
+    <br>
+    <div id="sfProcessSearchGrid">
+</div>
+<!-- Wash Process Select Window: START -->
+
+<!-- Wash Type Select Window: START -->
+<div id="washTypeSearchWindow" class="styleSearchWindow" hidden="hidden">
+    <input type="text" class="form-control" placeholder="Enter Wash Type" id="washTypeSearchWindowTxt" style="width:25%">
+    <br>
+    <div id="washTypeSearchGrid">
+</div>
+<!-- Wash Type Select Window: START -->

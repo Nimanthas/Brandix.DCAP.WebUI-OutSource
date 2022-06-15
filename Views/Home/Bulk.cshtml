@@ -1,0 +1,1725 @@
+﻿@{
+    Layout = "_Layout";
+}
+<script type="text/javascript">
+    var selectedDate = null;
+    var datePicker = null;
+    var scheduleObject = null;
+    var operationList = null;
+    var todayDate = null;
+    var scrapItems = [];
+    var SoberSheetMode = false;
+    var SSheetSCHNo = null;
+    var SSheetSCHId = null;
+    var SSAlreadySaved = false;
+    var clientconfig = null;
+
+    getSessionInfo();
+
+    $(document).ready(function () {
+        $('#sitebody').removeClass('body-login');
+        $("#sitebody").append(
+            '<div id="ajaxBusy" class="ajaxBusy"></div>'
+        );
+        $("#ajaxBusy").hide();
+        $('#main').show();
+        checkLoginStatus();
+        getSessionInfo();
+        
+        
+        if(clientconfig.wfId == 0) {
+            $('#main').hide();
+            msgBox.show('BULK ක්‍රියාකාරිත්වය යාවත්කාලීන කිරීමට ඔබට අවසර නැත.', 'you don not have permission to update bulk operation.', 'අවවාදයයි / Warning', 'BS01', 'Warning', function(){window.location.href = "Menu";});
+            //window.location.href = "Menu";
+        }
+
+        $('#pageTitleBar').html('<i class="fas fa-barcode pageMainIcon"></i><span class="pageTitle">DCap - Bulk Update</span>');
+        initializeControls();
+
+        $("#sno").blur(function () {
+            $('#sbutton').trigger('click');
+        });
+
+        $('#sno').on('keydown', function (e) {
+            if (e.keyCode == 13 || e.keyCode == 9) {
+                $('#sbutton').trigger('click');
+            }
+        });
+
+
+        checkIdle();
+        if (isValidClient == Answer.Null) {
+            window.location.href = "Login";
+        }
+        else if (isValidClient != null && clientconfig.dataCaptureMode != DataCaptureMode.Bulk) {
+            if (clientconfig.dataCaptureMode == DataCaptureMode.Barcode) {
+                msgBox.show('මෙම යන්ත්‍රයට බල්ක් අප්ඩේට් කිරීම සඳහා අවසර නැත.', 'This device is not authorized for Bulk update', 'අවවාදයයි / Warning', 'BU01', 'Warning', function () {
+                    if (clientconfig.dataCaptureMode == DataCaptureMode.Barcode) {
+                        window.location.href = "Barcode";
+                    }
+                });
+            } else {
+                msgBox.show('මෙම යන්ත්‍රයට බල්ක් අප්ඩේට් කිරීම සඳහා අවසර නැත.', 'This device is not authorized for Bulk update', 'අවවාදයයි / Warning', 'BU01', 'Warning', function () {
+                    //if (clientconfig.dataCaptureMode == DataCaptureMode.Barcode) {
+                        window.location.href = "Menu";
+                    //}
+                });
+            }
+        }
+
+    });
+
+    function checkLoginStatus() {
+        if (sessionStorage.getItem("UserId") != "") {
+            $("#toolBarLoggedinUser").html(sessionStorage.getItem("UserId"));
+        } else {
+            $("#toolBarLoggedinUser").html("");
+        }
+        if (sessionStorage.getItem("IsSignedIn") == Answer.Null || sessionStorage.getItem("IsSignedIn") == Answer.No) {
+            $("#loginBar").hide();
+            window.location.href = "Login";
+        } else {
+            $("#loginBar").show();
+        }
+    }
+    function initializeControls() {
+
+        $("#datepicker").kendoDatePicker();
+        todayDate = new Date();
+        $("#datepicker").data("kendoDatePicker").value(todayDate);
+        //$('#sno').focus();
+        $("#dgGQGrid3").hide();
+
+        $("#btnAdd").kendoButton({ icon: "add" });
+        $("#btnClear").kendoButton({ icon: "delete" });
+        $("#btnClearAll").kendoButton({ icon: "delete" });
+        $("#sbutton").kendoButton({ icon: "search" });
+        $("#btnLoard").kendoButton({ icon: "search" });
+
+        var data = [];
+        $("#ddlScrapReason").kendoDropDownList({
+            dataTextField: "text",
+            dataValueField: "value",
+            dataSource: data,
+            index: 0,
+
+        });
+
+        $("#ddlMainOperation").kendoDropDownList({
+            dataTextField: "text",
+            dataValueField: "value",
+            dataSource: data,
+            index: 0,
+
+        });
+
+        $("#ddlFactory").kendoDropDownList({
+            dataTextField: "text",
+            dataValueField: "value",
+            dataSource: data,
+            index: 0,
+
+        });
+
+        $("#ddlSubOperation").kendoDropDownList({
+            dataTextField: "text",
+            dataValueField: "value",
+            dataSource: data,
+            index: 0,
+
+        });
+
+        $("#ddlHour").kendoDropDownList({
+            dataTextField: "text",
+            dataValueField: "value",
+            dataSource: data,
+            index: 0,
+
+        });
+
+        $("#ddlColor").kendoDropDownList({
+            dataTextField: "text",
+            dataValueField: "value",
+            dataSource: data,
+            index: 0,
+
+        });
+
+        $("#ddlSize").kendoDropDownList({
+            dataTextField: "text",
+            dataValueField: "value",
+            dataSource: data,
+            index: 0,
+
+        });
+        
+        //For Good Qty loading
+        $("#dgGQGrid").kendoGrid({
+            dataSource: {
+                schema: {
+                    model: {
+                        fields: {
+                            size: { type: "string", editable: false },
+                            quantity: { type: "number", editable: true },
+                            rmks: { editable: false }
+                        }
+                    }
+                },
+                //change: onChangeQty,
+                batch: true,
+                aggregate: [{ field: "quantity", aggregate: "sum" }]
+            },
+            toolbar: ["excel"],
+            excel: {
+                allPages: true,
+                fileName: "Bulk Upload - " + (new Date()).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric'})  + ".xlsx",
+                filterable: true
+            },
+            navigatable: true,
+            height: 400,
+            scrollable: true,
+            dataBound: OnGridDataBound,
+            //change: onChangeQty,              
+            selectable: "multiple cell",
+            sortable: true,
+            editable: true,
+            filterable: true,
+            save: function () {
+                    var focusedCell = this.current();
+                    var currentUID = $(this.element[0]).closest('.k-detail-row').prev().attr('data-uid')
+                    var focusedCellIndex = focusedCell.index();  
+                    this.refresh();    
+                    this.current(focusedCell);
+                    
+                    setTimeout(function () {                             
+                    return function () {
+                        var focusedCell = $("#dgGQGrid tr[data-uid='" + currentUID + "'] td:nth-child(" + (focusedCellIndex + 1) + ")");
+                        $('#dgGQGrid').data('kendoGrid').editCell(focusedCell);
+                    }
+                }(), 200);               
+            },
+            columns: [
+                { field: "size", title: "Size", width: "50px", editable: false },
+                { field: "sizeId", hidden: true },
+                {
+                    field: "quantity", title: "Quantity", width: "50px", aggregates: ["sum"], footerTemplate: goodSummary
+                },
+                { field: "rmks", title: "Remarks", width: "100px", editable: false },
+                { field: "success", hidden: true }
+            ]
+        });     
+
+        function OnGridDataBound(e) {
+
+            var grid = $("#dgGQGrid").data().kendoGrid; // $("#grid").data("kendoGrid");  
+            var gridData = grid.dataSource.view();
+
+            for (var i = 0; i < gridData.length; i++) {
+                var currentUid = gridData[i].uid;
+                if (gridData[i].success == true) {
+
+                    var currentRow = grid.table.find("tr[data-uid='" + currentUid + "']");
+                    currentRow.css('background-color', 'lightgreen');
+                }
+            }
+        }
+
+        function OnGrid3DataBound(e) {
+
+            var grid = $("#dgGQGrid3").data().kendoGrid; // $("#grid").data("kendoGrid");  
+            var gridData = grid.dataSource.view();
+
+            for (var i = 0; i < gridData.length; i++) {
+                var currentUid = gridData[i].uid;
+                if (gridData[i].success == true) {
+
+                    var currentRow = grid.table.find("tr[data-uid='" + currentUid + "']");
+                    currentRow.css('background-color', 'lightgreen');
+                }
+            }
+        }
+
+        //todo
+        function onGridKeydown(e) {
+
+            if (e.keyCode === kendo.keys.TAB) {
+                var grid = $(this).closest("[data-role=grid]").data("kendoGrid");
+
+                var current = grid.current();
+                if (!current.hasClass("editable-cell")) {
+                    var nextCell = current.nextAll(".editable-cell");
+                    if (!nextCell[0]) {
+                        var nextRow = current.parent().next();
+                        var nextCell = current.parent().next().children(".editable-cell:first");
+                    }
+                    grid.current(nextCell);
+                    grid.editCell(nextCell[0])
+                }
+            }
+        }
+
+        function onChangeQty(e) {
+
+            console.log("Quantity Changed b4 if");
+
+            if (e.action == "itemchange" && e.field == "quantity") {
+                console.log("Quantity Changed");
+                var editItemModelId = e.items[0].sizeId;
+                var grid = $("#dgGQGrid").data().kendoGrid;
+
+                var data = grid.dataSource.data();
+                console.log(data);
+                //var dataItem = data.getItem(editItemModelId)
+                var dataItem = grid.dataSource.at(3);
+                console.log(dataItem);
+                dataItem.set("success", true);
+                dataItem.set("rmks", "test");
+            }
+        }
+
+        //Scrapped qty loading
+        $("#dgGQGrid2").kendoGrid({
+            dataSource: {
+                schema: {
+                    model: {
+                        fields: {
+                            size: { type: "string" }
+                            , scrpQty: { type: "number" }
+                        }
+                    }
+                },
+                pageSize: 20,
+                aggregate: [{ field: "scrpQty", aggregate: "sum" }]
+            },
+
+            height: 400,
+            scrollable: true,
+            sortable: true,
+            filterable: true,
+            save: function () {
+                var grid = this;
+                setTimeout(function () {
+                    grid.refresh();
+                })
+            },
+            columns: [
+                { field: "size", title: "Size", format: "{0:c}", width: "50px" },
+                { field: "sizeId", hidden: true },
+                { field: "scrapDescription", title: "Reason", width: "100px" },
+                { field: "scrapId", hidden: true },
+                {
+                    field: "scrpQty", title: "Scrap Qty", width: "50px"
+                    , aggregates: ["sum"], footerTemplate: scrapSummary
+                },
+                {
+                    field: "actn", title: "Action", width: "25px",
+                    template: function () {
+                        return "<button class='delete'>Delete</button>";
+                    }
+                },
+                { field: "rmks", title: "Remarks", width: "100px" },
+                { field: "success", hidden: true }
+                //{ command: ["destroy"], title: "", width: "50px" }
+            ]
+        });
+
+        //Sober sheet detail 
+        $("#dgGQGrid3").kendoGrid({
+            dataSource: {
+                schema: {
+                    model: {
+                        fields: {
+                            size: { type: "string", editable: false },
+                            quantity: { type: "number", editable: true },
+                            rmks: { editable: false }
+                        }
+                    }
+                },
+                //change: onChangeQty,
+                batch: true,
+                aggregate: [{ field: "quantity", aggregate: "sum" }]
+            },
+            navigatable: true,
+            height: 400,
+            scrollable: true,
+            dataBound: OnGrid3DataBound,
+            //change: onChangeQty,              
+            selectable: "multiple cell",
+            sortable: true,
+            editable: false,
+            filterable: true,
+            save: function () {
+                var grid = this;
+                setTimeout(function () {
+                    grid.refresh();
+                })
+            },
+            columns: [
+                { field: "styleNo", title: "Style", width: "100px", editable: false },
+                { field: "styleId", hidden: true },
+                { field: "scheduleNo", title: "Schedule", width: "100px", editable: false },
+                { field: "scheduleId", hidden: true },
+                { field: "colorNo", title: "Color", width: "100px", editable: false },
+                { field: "colorId", hidden: true },
+                { field: "sizeDesc", title: "Size", width: "75px", editable: false },
+                { field: "sizeId", hidden: true },
+                {
+                    field: "quantity", title: "Quantity", width: "50px", editable: false, aggregates: ["sum"], footerTemplate: SSheetSummary
+                },
+                { field: "rmks", title: "Remarks", width: "100px", editable: false },
+                { field: "success", hidden: true }
+            ]
+        });
+
+
+        $("#scrapQty").on("click", function (value, args) {
+
+            if ($("#scrapQty").val() === "on") {
+                $("#divSize").show();
+                $("#divddlSize").show();
+                $("#divScrapReason").show();
+                $("#divddlScrapReason").show();
+                $("#divQuantity").show();
+                $("#divscrpQty").show();
+                $("#divGridFuncBtns").show();
+                $("#dgGQGrid2").show();
+                $("#dgGQGrid").hide();
+                $("#dgGQGrid2").data('kendoGrid').dataSource.data([]);
+                $("#dgGQGrid3").data('kendoGrid').dataSource.data([]);
+                $("#dgGQGrid3").hide();
+                $('#SoberSheetNo').val('');
+            }
+
+        });
+
+        $("#goodQty").on("click", function (value, args) {
+
+            if ($("#goodQty").val() === "on") {
+
+                $("#divSize").hide();
+                $("#divddlSize").hide();
+                $("#divScrapReason").hide();
+                $("#divddlScrapReason").hide();
+                $("#divQuantity").hide();
+                $("#divscrpQty").hide();
+                $("#divGridFuncBtns").hide();
+                $("#dgGQGrid").show();
+                $("#dgGQGrid2").hide();
+
+                $("#dgGQGrid").data('kendoGrid').dataSource.data([]);
+                $("#dgGQGrid3").hide();
+            }
+
+        });
+
+
+
+        $("#btnAdd").on("click", function (value, args) {
+
+            $("#dgGQGrid2").show();
+            $("#dgGQGrid").hide();
+            $("#dgGQGrid3").hide();
+            getGridTwo();
+
+        });
+
+        $("#dgGQGrid2").on("click", "button.delete", function () {
+
+            var $tr = $(this).closest("tr"),
+                grid = $("#dgGQGrid2").data("kendoGrid");
+            grid.removeRow($tr);
+        });
+
+        $("#divSize").hide();
+        $("#divddlSize").hide();
+        $("#divQuantity").hide();
+        $("#divscrpQty").hide();
+        $("#divGridFuncBtns").hide();
+        $("#divScrapReason").hide();
+        $("#divddlScrapReason").hide();
+        $("#dgGQGrid2").hide();
+
+        $("#sbutton").click(function () {
+            var scheduleno = $('#sno').val();
+            if (scheduleno == null || scheduleno == "") {
+                msgBox.show('', 'Please enter the scheduleNo', 'Warning', 'BU02', 'Warning', null);
+            }
+            else {
+
+                $("#ddlFactory").data("kendoDropDownList").dataSource.data([]);
+                $("#ddlFactory").data("kendoDropDownList").text("");
+                $("#ddlMainOperation").data("kendoDropDownList").dataSource.data([]);
+                $("#ddlMainOperation").data("kendoDropDownList").text("");
+                $("#ddlColor").data("kendoDropDownList").dataSource.data([]);
+                $("#ddlColor").data("kendoDropDownList").text("");
+                $("#ddlHour").data("kendoDropDownList").dataSource.data([]);
+                $("#ddlHour").data("kendoDropDownList").text("");
+                $("#ddlSize").data("kendoDropDownList").dataSource.data([]);
+                $("#ddlSize").data("kendoDropDownList").text("");
+                $("#ddlScrapReason").data("kendoDropDownList").dataSource.data([]);
+                $("#ddlScrapReason").data("kendoDropDownList").text("");
+                $("#dgGQGrid3").data('kendoGrid').dataSource.data([]);
+                $("#dgGQGrid3").hide();
+                $("#dgGQGrid").show();
+
+                $.ajax({
+
+                    url: '@ViewBag.APIURL/Lookup/GetScheduleDetailBySchedule?ScheduleNo=' + scheduleno,
+                    type: 'GET',
+                    dataType: 'json',
+                    //async: false,
+                    contentType: 'application/json',
+                    beforeSend: function () {
+                        $("#ajaxBusy").show();
+                    },
+                    complete: function () {
+                        $("#ajaxBusy").hide();
+                    },
+                    success: function (response) {
+                        if (response != null) {
+                            scheduleObject = response;
+                            styleId = response.styleId
+                            scheduleId = response.scheduleId
+                            $('#lblstyle').html(response.styleNo);
+                            $('#lblsdesc').html(response.styleDesc);
+                            $('#lblzf').html(scheduleObject.zfeature);
+                            $('#lblpo').html(scheduleObject.poNo);
+
+                            getFactory();
+                            getOperation();
+                            //getNextOperation();
+                            //getHours();
+                            getColour();
+                            //getSize();
+                            getScrap();
+                        }
+                    },
+                    error: function (jqXHR, textStatus, errorThrown) {
+                        formatErrorMessage(jqXHR, errorThrown, "Bulk");
+                    }
+                });
+            }
+
+        });
+
+
+        $("#btnClear").on("click", function (value, args) {
+            $("#ddlSize").data("kendoDropDownList").text("");
+            $("#ddlScrapReason").data("kendoDropDownList").text("");
+            $('#scrpQty').val('');
+            $("#dgGQGrid2").data('kendoGrid').dataSource.data([]);
+            $("#dgGQGrid3").data('kendoGrid').dataSource.data([]);
+
+        });
+
+        $("#btnClearAll").on("click", function (value, args) {
+            $('#sno').val('');
+            //var ddl = $("#clientid").data("kendoDropDownList");
+            $("#ddlFactory").data("kendoDropDownList").dataSource.data([]);
+            $("#ddlFactory").data("kendoDropDownList").text("");
+            $("#ddlMainOperation").data("kendoDropDownList").dataSource.data([]);
+            $("#ddlMainOperation").data("kendoDropDownList").text("");
+            $("#ddlColor").data("kendoDropDownList").dataSource.data([]);
+            $("#ddlColor").data("kendoDropDownList").text("");
+            $("#ddlHour").data("kendoDropDownList").dataSource.data([]);
+            $("#ddlHour").data("kendoDropDownList").text("");
+            $('#jobNumber').val('');
+            $("#dgGQGrid").data('kendoGrid').dataSource.data([]);
+            $("#dgGQGrid2").data('kendoGrid').dataSource.data([]);
+            $("#dgGQGrid3").data('kendoGrid').dataSource.data([]);
+            $("#ddlSize").data("kendoDropDownList").dataSource.data([]);
+            $("#ddlSize").data("kendoDropDownList").text("");
+            $("#ddlScrapReason").data("kendoDropDownList").dataSource.data([]);
+            $("#ddlScrapReason").data("kendoDropDownList").text("");
+            $('#scrpQty').val('');
+            $("#datepicker").data("kendoDatePicker").value(todayDate);
+            $('#SoberSheetNo').val('');
+
+        });
+
+        $("#SoberSheetNo").keydown(function (e) {
+            if (e.keyCode == 13) {              
+               LoadSoberSheetGrid();
+            }
+        });
+
+    }
+
+    function getFactory() {
+
+        if (SoberSheetMode) {
+            var scheduleno = SSheetSCHNo;
+        }
+        else {
+            var scheduleno = $('#sno').val();
+        }
+
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetFactoryWFComboData?ScheduleNo=' + scheduleno,
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+
+                $("#ddlFactory").kendoDropDownList({
+                    dataTextField: "displayVal",
+                    dataValueField: "wfid",
+                    dataSource: response,
+                    optionLabel: {
+                        displayVal: "Select Factory",
+                        wfid: -1
+                    },
+                    index: 0,
+                    change: function (e) {
+                        factoryChange();
+
+                    }
+                });
+
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Bulk");
+            }
+        });
+    }
+
+    function getOperation() {
+        //alert('WFID: ' + scheduleObject.wfId);
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetOpperationsByWFID?Wfid=' + scheduleObject.wfId,
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                operationList = response;
+                $("#ddlMainOperation").kendoDropDownList({
+                    dataTextField: "oppTeamName",
+                    dataValueField: "wfdepinstId",
+                    dataSource: response,
+                    index: 0,
+                    optionLabel: {
+                        oppTeamName: "Select Operation",
+                        wfdepinstId: 0
+                    },
+                    change: function (e) {
+                        operationChange();
+
+                    }
+                });
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Bulk");
+            }
+        });
+    }
+
+   // var teamId;
+    function factoryChange() {
+        var factoryText = $("#ddlFactory").data("kendoDropDownList").text();
+        if (factoryText != null && factoryText != "") {
+            var factoryArray = factoryText.split('-');
+            $('#dataLabelFactory').html(factoryArray[3]);
+        }
+
+        //var wfdepinstId = $("#ddlMainOperation").val();
+        //  if (wfdepinstId != null && wfdepinstId != 0) {
+        // getOperation();
+        //   }
+        // $("#ddlSubOperation").data("kendoDr;opDownList").refresh();
+        //$("#ddlSubOperation").data("kendoDropDownList").value(-1);
+        //  $("#ddlSubOperation").data("kendoDropDownList").dataSource.data([]);
+
+        //  $("#ddlSubOperation").data("kendoDropDownList").value(-1);
+        //this.selected
+        // $("#ddlSubOperation").data("kendoDropDownList").text("");
+        // $("#ddlSubOperation").data("kendoDropddlDownList").dataSource.data([]);
+        // $("#ddlSubOperation").data("kendoDropDownList").text("");
+
+        //    var txtQPLPickupFrom = $("#ddlSubOperation").data("kendoDropDownList");
+        //txtQPLPickupFrom.text(txtQPLPickupFrom.options.optionLabel);
+        //txtQPLPickupFrom.element.val("");
+        //xtQPLPickupFrom.selectedIndex = -1;
+        //var dropdownlist = $("#ddlSubOperation").kendoDropDownList;
+
+        //dropdownlist.selectat(0);
+
+        //var dropdownlist = $("#ddlSubOperation").data("kendoDropDownList");
+        //var dropdownlist = $("#ddlSubOperation").kendoDropDownList;
+        //dropdownlist.refresh();
+        //dropdownlist.select(1);
+
+
+    }
+
+
+    function operationChange() {
+
+        var wfdepinstId = $("#ddlMainOperation").val();
+        var operationText = $("#ddlMainOperation").data("kendoDropDownList").text();
+        if (operationText != null && operationText != "") {
+            var operation = operationText.split('-');
+            if (operation.length == 3) {
+                $('#dataLabelTeam').html(operation[1] + '-' + operation[2]);
+            }
+            else {
+                $('#dataLabelTeam').html(operation[1]);
+            }
+
+            $('#dataLabelOperation').html(operation[0]);
+
+        }
+        //TODO
+        /*if(operationList.some(oplist => oplist.wfdepinstId === wfdepinstId)){
+            var op = $.grep(operationList, function (h) {
+                return h.wfdepinstId == wfdepinstId
+            });
+            $('#dataLabelTeam').html(op.teamName);
+            $('#dataLabelOperation').html(op.depdesc + ' - ' + op.operationCode);
+        }  
+*/
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetWFConfigurationbyID?WfdepinstId=' + wfdepinstId,
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                if (response != null) {
+                    // Get the datasouce to Hour dropdown
+                    getHours(response.teamId);
+                    //teamId = response.teamId;
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Bulk");
+            }
+        });
+    }
+
+    function getHours(teamId) {
+        //alert('Team Id: ' + teamId);
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetProductionHoursComboData?TeamId=' + teamId,
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                $("#ddlHour").kendoDropDownList({
+
+                    dataTextField: "displayVal",
+                    dataValueField: "hourNo",
+                    dataSource: response,
+                    index: 0,
+                    optionLabel: {
+                        displayVal: "Select Hour",
+                        hourNo: -1
+                    },
+                });
+
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Bulk");
+            }
+        });
+    }
+
+    function getColour() {
+        //alert('StyleNo: ' + scheduleObject.styleNo);
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetColorsByStylesNo?Style=' + scheduleObject.styleNo,
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+
+                $("#ddlColor").kendoDropDownList({
+                    dataTextField: "l4no",
+                    dataValueField: "l4id",
+                    dataSource: response,
+                    index: 0,
+                    optionLabel: {
+                        l4no: "Select Color",
+                        l4id: -1
+                    },
+
+                    change: function (e) {
+                        colorChange();
+
+                    }
+                });
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Bulk");
+            }
+        });
+    }
+
+    function getSessionInfo() {
+        isValidClient = sessionStorage.getItem("IsValidClient");
+        clientconfig = JSON.parse(sessionStorage.getItem("Clientconfig"));
+        userPermissionList = JSON.parse(sessionStorage.getItem("UserPermissionList"));
+        clientIP = sessionStorage.getItem("ClientIP");
+    }
+
+    function colorChange() {
+        getSize();
+        if ($('#goodQty').is(':checked')) {
+            getGrid();
+            $("#dgGQGrid").show();
+            $("#dgGQGrid2").hide();
+            $("#dgGQGrid3").data('kendoGrid').dataSource.data([]);
+            $("#dgGQGrid3").hide();
+        }
+    }
+
+    function getSize() {
+
+        var l1 = scheduleObject.styleId;
+        var l2 = scheduleObject.scheduleId;
+        var l3 = 0;
+        var l4 = $("#ddlColor").val();
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetSizesByStyleSheduleColor?L1id=' + l1 + '&L2id=' + l2 + '&L3id=' + l3 + '&L4id=' + l4 + '',
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                $("#ddlSize").kendoDropDownList({
+                    dataTextField: "l5no",
+                    dataValueField: "l5id",
+                    dataSource: response,
+                    optionLabel: {
+                        l5no: "Select Size",
+                        l5id: -1
+                    },
+                    index: 0,
+                });
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Bulk");
+            }
+        });
+    }
+
+    var scrapObject;
+    function getScrap() {
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetRejectReasons',
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                scrapObject = response;
+                //var desc= response
+                $("#ddlScrapReason").kendoDropDownList({
+                    dataTextField: "rrdesc",
+                    dataValueField: "rrid",
+                    dataSource: response,
+                    optionLabel: {
+                        rrdesc: "Select Scrap Reason",
+                        rrid: -1
+                    },
+                    index: 0,
+                });
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Bulk");
+            }
+        });
+    }
+
+    function getGrid() {
+        $("#dgGQGrid").data('kendoGrid').dataSource.data([]);
+        var l1 = scheduleObject.styleId;
+        var l2 = scheduleObject.scheduleId;
+        var l3 = 0;
+        var l4 = $("#ddlColor").val();   //1;
+        if (l4 != "" && l4 != "Select Color") {
+            var gridData = [];
+            $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetSizesByStyleSheduleColor?L1id=' + l1 + '&L2id=' + l2 + '&L3id=' + l3 + '&L4id=' + l4 + '',
+                type: 'GET',
+                dataType: 'json',
+                //async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {
+                    $.each(response, function (index, elements) {
+                        var object = {
+                            size: elements.l5no,
+                            sizeId: elements.l5id,
+                            quantity: 0,
+                            rmks: '',
+                            success: false
+                        }
+                        gridData.push(object);
+                    });
+
+                    $("#dgGQGrid").data('kendoGrid').dataSource.data(gridData);
+                    $("#dgGQGrid3").data('kendoGrid').dataSource.data([]);
+                    $("#dgGQGrid3").hide();
+                    SoberSheetMode = false;
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "Bulk");
+                }
+            });
+        }
+    }
+
+    function getGrid3() {
+
+        var SoberSheetNo = $("#SoberSheetNo").val();
+
+        if (SoberSheetNo == "") {
+
+            msgBox.show('', 'Please Enter Job Sheet / Sober Sheet No', 'Warning', 'BU03', 'Warning', null);
+        }
+        else {
+
+            var gridData = [];
+            $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetSoberSheetDetails?SoberSheetNo=' + SoberSheetNo + '',
+                type: 'GET',
+                dataType: 'json',
+                //async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {
+                    $.each(response, function (index, elements) {
+                        var object = {
+                            styleId: elements.styleId,
+                            styleNo: elements.styleNo,
+                            scheduleId: elements.scheduleId,
+                            scheduleNo: elements.scheduleNo,
+                            colorId: elements.colorId,
+                            colorNo: elements.colorNo,
+                            sizeId: elements.sizeId,
+                            sizeDesc: elements.sizeDesc,
+                            quantity: elements.quantity,
+                            rmks: '',
+                            success: false
+                        }
+
+                        SSheetSCHId = response[1].scheduleId;
+                        SSheetSCHNo = response[1].scheduleNo;
+                        gridData.push(object);
+
+                    });
+
+                    SoberSheetMode = true;
+                    $("#dgGQGrid").hide();
+                    $("#dgGQGrid2").hide();
+                    $("#dgGQGrid3").show();
+                    $("#dgGQGrid3").data('kendoGrid').dataSource.data(gridData);
+
+                    if (response == null) {
+                        msgBox.show('', 'Incorrect Sober Sheet No or All Shedule / Sizes in Sober Sheet not transferred to DCap', 'Warning', 'BU03', 'Warning', null);
+                    }
+                    GetDatabySobersheetSCHNo(SSheetSCHId, SSheetSCHNo);
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "Bulk");
+                }
+            });
+        }
+    }
+    var array = [];
+
+    function scrapSummary() {
+        var sum = 0;
+        var scrapGridData = $("#dgGQGrid2").data("kendoGrid").dataSource.data();
+
+        $.each(scrapGridData, function (index, element) {
+            sum += parseInt(element.scrpQty);
+
+        });
+
+        return "Total : " + sum;
+    }
+
+    function goodSummary() {
+        var sum = 0;
+        var scrapGridData = $("#dgGQGrid").data("kendoGrid").dataSource.data();
+
+        $.each(scrapGridData, function (index, element) {
+            sum += parseInt(element.quantity);
+
+        });
+
+        return "Total : " + sum;
+    }
+    
+    function SSheetSummary() {
+        var sum = 0;
+        var SSheetData = $("#dgGQGrid3").data("kendoGrid").dataSource.data();
+
+        $.each(SSheetData, function (index, element) {
+            sum += parseInt(element.quantity);
+
+        });
+
+        return "Total : " + sum;
+    }
+    
+    function getGridTwo() {
+        if ($('#scrpQty').val() != "" && $('#scrpQty').val() != 0) {
+
+            var sizev = $("#ddlSize").data("kendoDropDownList").text();
+            var scrapDescription = $("#ddlScrapReason").data("kendoDropDownList").text();
+
+            // get the grid data
+            var validationFailed = false;
+            var scrapGridData = $("#dgGQGrid2").data("kendoGrid").dataSource.data();
+            if (scrapGridData != null) {
+                $.each(scrapGridData, function (index, elements) {
+                    if (elements.sizeId == $("#ddlSize").val() && elements.scrapId == $("#ddlScrapReason").val()) {
+                        validationFailed = true;
+                        return;
+                    }
+
+                });
+
+                if (validationFailed) {
+                    msgBox.show('', 'Please select new scrap reason or size', 'Warning', 'BU09', 'Warning', null);
+                    return;
+                }
+            }
+
+            $("#dgGQGrid2").data("kendoGrid").dataSource.add(
+                {
+                    size: sizev,
+                    sizeId: $("#ddlSize").val(),
+                    scrapDescription: scrapDescription,
+                    scrapId: $("#ddlScrapReason").val(),
+                    scrpQty: $('#scrpQty').val(),
+                    actn: '',
+                    rmks: '',
+                    success: false
+
+                });
+
+            var grid = $("#dgGQGrid2").data("kendoGrid");
+            grid.refresh();
+
+        } else {
+            msgBox.show('', 'Please enter scrap quantity', 'Warning', 'BU03', 'Warning', null);
+            //alert("");
+        }
+    }
+
+    function enableScrapControls() {
+
+    }
+
+    function disableScrapControls() {
+
+
+    }
+    
+    function LoadSoberSheetGrid() {
+        getGrid3();
+    }
+
+    function SaveGridData() {
+        //var jobNumber = $("#jobNumber").val();
+
+        //if (jobNumber == "" || jobNumber == null) {
+        //    msgBox.show('', 'Please enter job number', 'Warning', 'BU04', 'Warning', null);
+        //    //alert("Please enter job number");
+        //}
+        //else {
+
+        //}
+        $("#ajaxBusy").show();
+        var facCode;
+        var sbuCode;
+        var factoryText = $("#ddlFactory").data("kendoDropDownList").text();
+        var OperationText = $("#ddlMainOperation").data("kendoDropDownList").text();
+        var HourText = $("#ddlHour").data("kendoDropDownList").text();
+
+        if (factoryText == "Select Factory") {
+            $("#ajaxBusy").hide();
+            msgBox.show('', 'Please Select a Factory', 'Warning', 'BU03', 'Warning', null);
+        }
+
+        else if (OperationText == "Select Operation") {
+            $("#ajaxBusy").hide();
+            msgBox.show('', 'Please Select a Operation', 'Warning', 'BU03', 'Warning', null);
+        }
+        else if (HourText == "Select Hour") {
+            $("#ajaxBusy").hide();
+            msgBox.show('', 'Please Select a Hour', 'Warning', 'BU03', 'Warning', null);
+        }
+        else {
+            if (factoryText != null && factoryText != "") {
+
+                sbuCode = factoryText.split('-')[2];
+                facCode = factoryText.split('-')[3];
+            }
+
+            if (SoberSheetMode) {
+                SaveSoberSheet(sbuCode, facCode);
+            }
+            else {
+                if ($('#goodQty').is(':checked')) {
+                    SaveGoodQuantity(sbuCode, facCode);
+                }
+
+                if ($('#scrapQty').is(':checked')) {
+                    SaveScrapQuantity(sbuCode, facCode);
+                }
+            }
+            $("#ajaxBusy").hide();
+        }
+    }
+
+    function GetDatabySobersheetSCHNo(SSheetSCHId, SSheetSCHNo) {
+
+        $.ajax({
+
+            url: '@ViewBag.APIURL/Lookup/GetScheduleDetailBySchedule?ScheduleNo=' + SSheetSCHNo,
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                if (response != null) {
+                    scheduleObject = response;
+                    styleId = response.styleId
+                    scheduleId = response.scheduleId
+                    $('#lblstyle').html(response.styleNo);
+                    $('#lblsdesc').html(response.styleDesc);
+                    $('#lblzf').html("-NA-");
+                    $('#lblpo').html("-NA-");
+                    // $('#lblzf').html(scheduleObject.zfeature);
+                    // $('#lblpo').html(scheduleObject.poNo);
+
+                    $("#ddlFactory").data("kendoDropDownList").dataSource.data([]);
+                    $("#ddlFactory").data("kendoDropDownList").text("");
+                    getFactory();
+
+                    $("#ddlMainOperation").data("kendoDropDownList").dataSource.data([]);
+                    $("#ddlMainOperation").data("kendoDropDownList").text("");
+                    getOperation();
+
+                    $("#ddlHour").data("kendoDropDownList").dataSource.data([]);
+                    $("#ddlHour").data("kendoDropDownList").text("");
+                    //getNextOperation();
+                    //getHours();
+                    //getColour();
+                    //getSize();
+                    //getScrap();
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Bulk");
+            }
+        });
+    }
+
+    function SoberSheetAlreadySaved() {
+        var SoberSheetNo = $("#SoberSheetNo").val();
+
+        $.ajax({
+
+            url: '@ViewBag.APIURL/Lookup/GetIsSoberSheetAlredySaved?SoberSheetNo=' + SoberSheetNo,
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            async: false,
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                console.log(response);
+                SSAlreadySaved = response;
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Bulk");
+            }
+        });
+    }
+
+    function SaveGoodQuantity(sbuCode, factoryCode) {
+
+        var UserInList = [];
+
+        var selectedgridData = $("#dgGQGrid").data("kendoGrid").dataSource.data();
+        if (selectedgridData != null) {
+            $.each(selectedgridData, function (index, element) {
+                var object = {
+                    WfdepinstId: $("#ddlMainOperation").val(),
+                    WFID: $("#ddlFactory").val(), // fctory dd
+                    FacCode: factoryCode, //$("#dataLabelFactory").val(),
+                    Sbucode: sbuCode,
+                    GroupCode: "Brandix",
+                    StyleId: scheduleObject.styleId,
+                    ScheduleId: scheduleObject.scheduleId,
+                    ColorId: $("#ddlColor").val(),
+                    HourNo: $("#ddlHour").val(),
+                    JobNo: $("#jobNumber").val(),
+                    CreatedBy: sessionStorage.getItem("UserId"),
+                    CreatedMachine: clientconfig.clientId,
+                    SizeId: element.sizeId,//size dd
+                    SizeDesc: element.size,
+                    EnteredQtyGd: element.quantity, //grid qty
+                    TxnMode: 1,
+                    TxnDate: $("#datepicker").val(),
+                    SaveSuccessfull: element.success,
+                    Remark: element.rmks
+                };
+
+                if (object.EnteredQtyGd > 0)
+                    object.PlussMinus = 1;
+                else
+                    object.PlussMinus = 2;
+
+                UserInList.push(object);
+            });
+
+            if (UserInList != null && UserInList.length > 0) {
+                console.log(UserInList);
+                var gridData = [];
+                $.ajax({
+                    url: '@ViewBag.APIURL/BusinessLogics/UpdateBulkQty',
+                    type: 'POST',
+                    dataType: 'json',
+                    async: false,
+                    data: JSON.stringify(UserInList),
+                    contentType: 'application/json; charset=utf-8',
+                    beforeSend: function () {
+                        $("#ajaxBusy").show();
+                    },
+                    complete: function () {
+                        $("#ajaxBusy").hide();
+                    },
+                    success: function (response) {
+                        console.log(response);
+                        $.each(response, function (index, elements) {
+                            var object = {
+                                size: elements.sizeDesc,
+                                sizeId: elements.sizeId,
+                                quantity: elements.enteredQtyGd,
+                                rmks: elements.responce[0],
+                                success: elements.saveSuccessfull
+                            }
+
+                            gridData.push(object);
+                        });
+
+                        var grid = $("#dgGQGrid").data("kendoGrid")
+                        grid.dataSource.data([]);
+                        grid.dataSource.data(gridData);
+                        //var dataSource = new kendo.data.DataSource({ data: gridData });
+                        //var grid = $("#dgGQGrid").data("kendoGrid");
+                        //grid.dataSource.data([]);
+                        //grid.setDataSource(dataSource);
+                    },
+                    error: function (jqXHR, textStatus, errorThrown) {
+                        formatErrorMessage(jqXHR, errorThrown, "Bulk");
+                    }
+                });
+            }
+            else {
+                msgBox.show('', 'Please add quantity', 'Warning', 'BU05', 'Warning', null);
+                //alert("Please add quantity");
+            }
+        }
+        else {
+            msgBox.show('', 'Please enter quanity', 'Warning', 'BU06', 'Warning', null);
+            //alert("Please enter quanity");
+        }
+    }
+
+
+
+
+    function SaveSoberSheet(sbuCode, factoryCode) {
+
+        var operationText = $("#ddlMainOperation").data("kendoDropDownList").text();
+        var SewingInValidation = true;
+
+        if (operationText != null && operationText != "") {
+            var operation = operationText.split('-');
+            var OppCode = operation[0].substring(operation[0].indexOf("[") + 1, operation[0].indexOf("]"));
+            if (OppCode != 129) {
+
+                msgBox.show('', 'Only Sewing-In Can be posted in Job sheet / Sober sheet Mode', 'Warning', 'BU03', 'Warning', null);
+                SewingInValidation = false;
+            }
+            SSAlreadySaved = false;
+            SoberSheetAlreadySaved();
+
+            if (SSAlreadySaved) {
+                msgBox.show('', 'This Sober sheet Already Saved, you cannot save again..!', 'Warning', 'BU03', 'Warning', null);
+                SewingInValidation = false;
+            }
+        }
+
+        if (SewingInValidation) {
+
+            var UserInList = [];
+
+            var selectedgridData = $("#dgGQGrid3").data("kendoGrid").dataSource.data();
+            if (selectedgridData != null) {
+                $.each(selectedgridData, function (index, element) {
+                    var object = {
+                        WfdepinstId: $("#ddlMainOperation").val(),
+                        WFID: $("#ddlFactory").val(), // fctory dd
+                        FacCode: factoryCode, //$("#dataLabelFactory").val(),
+                        Sbucode: sbuCode,
+                        GroupCode: "Brandix",
+                        StyleId: element.styleId,
+                        ScheduleId: element.scheduleId,
+                        ColorId: element.colorId,
+                        ColorNo: element.colorNo,
+                        HourNo: $("#ddlHour").val(),
+                        JobNo: $("#SoberSheetNo").val(),
+                        CreatedBy: sessionStorage.getItem("UserId"),
+                        CreatedMachine: clientconfig.clientId,
+                        SizeId: element.sizeId,
+                        SizeDesc: element.sizeDesc,
+                        EnteredQtyGd: element.quantity,
+                        TxnMode: 1,
+                        TxnDate: $("#datepicker").val(),
+                        SaveSuccessfull: element.success,
+                        Remark: element.rmks,
+                        StyleNo: element.styleNo,
+                        ScheduleNo: element.scheduleNo
+                    };
+
+                    if (object.EnteredQtyGd > 0)
+                        object.PlussMinus = 1;
+                    else
+                        object.PlussMinus = 2;
+
+                    UserInList.push(object);
+                });
+
+                if (UserInList != null && UserInList.length > 0) {
+                    console.log(UserInList);
+                    var gridData = [];
+                    $.ajax({
+                        url: '@ViewBag.APIURL/BusinessLogics/UpdateBulkQty',
+                        type: 'POST',
+                        dataType: 'json',
+                        async: false,
+                        data: JSON.stringify(UserInList),
+                        contentType: 'application/json; charset=utf-8',
+                        beforeSend: function () {
+                            $("#ajaxBusy").show();
+                        },
+                        complete: function () {
+                            $("#ajaxBusy").hide();
+                        },
+                        success: function (response) {
+                            console.log(response);
+                            $.each(response, function (index, elements) {
+                                var object = {
+                                    styleId: elements.styleId,
+                                    styleNo: elements.styleNo,
+                                    scheduleId: elements.scheduleId,
+                                    scheduleNo: elements.scheduleNo,
+                                    colorId: elements.colorId,
+                                    colorNo: elements.colorNo,
+                                    sizeId: elements.sizeId,
+                                    sizeDesc: elements.sizeDesc,
+                                    quantity: elements.qtytoSaveGd,
+                                    rmks: elements.responce[0],
+                                    success: elements.saveSuccessfull
+                                }
+                                gridData.push(object);
+                            });
+
+                            var grid = $("#dgGQGrid3").data("kendoGrid")
+                            grid.dataSource.data([]);
+                            grid.dataSource.data(gridData);
+                        },
+                        error: function (jqXHR, textStatus, errorThrown) {
+                            formatErrorMessage(jqXHR, errorThrown, "Bulk");
+                        }
+                    });
+                }
+                else {
+                    msgBox.show('', 'Please add quantity', 'Warning', 'BU05', 'Warning', null);
+                    //alert("Please add quantity");
+                }
+            }
+            else {
+                msgBox.show('', 'Please enter quanity', 'Warning', 'BU06', 'Warning', null);
+                //alert("Please enter quanity");
+            }
+        }
+    }
+
+    function SaveScrapQuantity(sbuCode, factoryCode) {
+        var UserInList = [];
+        var selectedgridData = $("#dgGQGrid2").data("kendoGrid").dataSource.data();
+        if (selectedgridData != null) {
+            $.each(selectedgridData, function (index, element) {
+                var object = {
+                    WfdepinstId: $("#ddlMainOperation").val(),
+                    WFID: $("#ddlFactory").val(), // fctory dd
+                    FacCode: factoryCode,//$("#dataLabelFactory").val(),
+                    Sbucode: sbuCode,
+                    GroupCode: "Brandix",
+                    StyleId: scheduleObject.styleId,
+                    ScheduleId: scheduleObject.scheduleId,
+                    ColorId: $("#ddlColor").val(),
+                    HourNo: $("#ddlHour").val(),
+                    JobNo: $("#jobNumber").val(),
+                    CreatedBy: sessionStorage.getItem("UserId"),
+                    CreatedMachine: clientconfig.clientId,
+                    SizeId: element.sizeId,//size dd
+                    SizeDesc: element.size,
+                    EnteredQtyScrap: element.scrpQty, //grid qty
+                    RRId: element.scrapId,
+                    ScrapReason: element.scrapDescription,
+                    TxnMode: 2,
+                    TxnDate: $("#datepicker").val(),
+                    SaveSuccessfull: element.success,
+                    Remark: element.rmks
+                }
+
+                if (object.EnteredQtyScrap > 0)
+                    object.PlussMinus = 1;
+                else
+                    object.PlussMinus = 2;
+
+                UserInList.push(object);
+            });
+
+            if (UserInList != null && UserInList.length > 0) {
+                console.log(UserInList);
+                var gridData = [];
+                $.ajax({
+                    url: '@ViewBag.APIURL/BusinessLogics/UpdateBulkQty',
+                    type: 'POST',
+                    dataType: 'json',
+                    async: false,
+                    data: JSON.stringify(UserInList),
+                    contentType: 'application/json',
+                    beforeSend: function () {
+                        $("#ajaxBusy").show();
+                    },
+                    complete: function () {
+                        $("#ajaxBusy").hide();
+                    },
+                    success: function (response) {
+                        console.log(response);
+                        $.each(response, function (index, elements) {
+                            var object = {
+                                sizeDesc: elements.sizeDesc,
+                                sizeId: elements.sizeId,
+                                scrpQty: elements.enteredQtyScrap,
+                                scrapDescription: elements.scrapReason,
+                                scrapId: elements.rrId,
+                                rmks: elements.responce[0],
+                                success: elements.saveSuccessfull
+                            }
+
+                            gridData.push(object);
+                        });
+
+                        var grid = $("#dgGQGrid2").data("kendoGrid")
+                        grid.dataSource.data([]);
+                        grid.dataSource.data(gridData);
+
+                    },
+                    error: function (jqXHR, textStatus, errorThrown) {
+                        formatErrorMessage(jqXHR, errorThrown, "Bulk");
+                    }
+                });
+            }
+            else {
+                msgBox.show('', 'Please add quantity', 'Warning', 'BU07', 'Warning', null);
+                //alert("Please add quantity");
+            }
+        }
+        else {
+            msgBox.show('', 'Please enter quanity', 'Warning', 'BU08', 'Warning', null);
+            //alert("Please enter quanity");
+        }
+    }
+
+</script>
+
+<div id="main">
+    <div class="row">
+        <div class="col-md-4" style="padding-left: 0px; padding-right: 0px;">
+            <div class="row">
+                <div class="col-md-4">
+                    <label class="bu-control-label">Date :</label>
+                </div>
+                <div class="col-md-6">
+                    <input id="datepicker" class="bu-form-control" />
+                </div>
+                <div class="col-md-2"></div>
+            </div>
+            <div class="row">
+                <div class="col-md-4">
+                    <label class="bu-control-label">Schedule :</label>
+                </div>
+                <div class="col-md-6">
+                    <input id="sno" class="bu-form-control" />
+                </div>
+                <div class="col-md-2" hidden="hidden">
+                    <button id="sbutton" class="bu-searchButton"></button>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-4">
+                    <label class="bu-control-label">Factory :</label>
+                </div>
+                <div class="col-md-6">
+                    <div id="ddlFactory" class="bu-form-control" style="width:250px"></div>
+                </div>
+                <div class="col-md-2"></div>
+            </div>
+            <div class="row">
+                <div class="col-md-4">
+                    <label class="bu-control-label">Operation :</label>
+                </div>
+                <div class="col-md-6">
+                    <div id="ddlMainOperation" class="bu-form-control" style="width:450px"></div>
+                </div>
+                <div class="col-md-2"></div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4">
+                    <label class="bu-control-label">Hour :</label>
+                </div>
+                <div class="col-xs-6">
+                    <div id="ddlHour" class="bu-form-control" style="width:250px"></div>
+                </div>
+                <div class="col-xs-2"></div>
+            </div>
+            <div class="row">
+                <div class="col-md-4">
+                    <label class="bu-control-label">Color:</label>
+                </div>
+                <div class="col-md-6">
+                    <div id="ddlColor" class="bu-form-control" style="width:250px"></div>
+                </div>
+                <div class="col-md-2"></div>
+            </div>
+            <div class="row">
+                <div class="col-md-4">
+                    <label class="bu-control-label">Job Number :</label>
+                </div>
+                <div class="col-md-3">
+                    <input id="jobNumber" class="bu-form-control" required />
+                </div>
+                <div class="col-md-2"></div>
+            </div>
+
+        </div>
+        <div class="col-md-3" style="padding-left: 0px; padding-right: 0px;">
+            <div class="row">
+                <div class="col-md-5">
+                    <label class="bu-control-label">Scan Option :</label>
+                </div>
+                <div class="col-md-7">
+
+                    <div>
+                        <input type="radio" name="inputType" id="goodQty" class="k-radio" checked="checked">
+                        <label class="k-radio-label" for="goodQty">Good Qty</label>
+                    </div>
+                    <div>
+                        <input type="radio" name="inputType" id="scrapQty" class="k-radio">
+                        <label class="k-radio-label" for="scrapQty">Scrap Qty</label>
+                    </div>
+
+                </div>
+            </div>            
+            <div class="row">
+                <div class="col-md-5">
+                    <div id="divSize">
+                        <label class="bu-control-label" id="sizeLable">Size:</label>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <div id="divddlSize">
+                        <div class="bu-form-control" id="ddlSize"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-5">
+                    <div id="divScrapReason">
+                        <label class="bu-control-label" id="scrapLable">Scrap Reason:</label>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <div id="divddlScrapReason">
+                        <div class="bu-form-control" id="ddlScrapReason"></div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="row">
+                <div class="col-md-5">
+                    <div id="divQuantity">
+                        <label class="bu-control-label" id="qtyLabel">Qty:</label>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <div id="divscrpQty">
+                        <input id="scrpQty" class="bu-form-control" type="number" />
+                    </div>
+                </div>
+
+            </div>
+            <div class="row" style="height: 10px"></div>
+            <div class="row">
+                <div class="col-md-2"></div>
+                <div class="col-md-10">
+                    <div id="divGridFuncBtns">
+                        <button id="btnAdd">Add to Grid</button>
+                        <button id="btnClear" class="addButton">Clear</button>
+                    </div>
+                </div>
+                <div class="col-md-2"></div>
+            </div>             
+        </div>
+        <div class="col-md-5" style="padding-left: 0px;">
+            <div class="bc_rightcontent">
+                <div class="row roundCornerGroupBox">
+                    <div class="col-xs-6">
+                        <div class="row">
+                            <label class="bu-control-label col-xs-4">Style :</label>
+                            <label class="bu-control-datalabel col-xs-3" id="lblstyle"></label>
+                        </div>
+                        <div class="row">
+                            <label class="bu-control-label col-xs-4">Style Desc :</label>
+                            <label class="bu-control-datalabel col-xs-3" id="lblsdesc"></label>
+                        </div>
+                        <div class="row">
+                            <label class="bu-control-label col-xs-4">Z Feature :</label>
+                            <label class="bu-control-datalabel col-xs-3" id="lblzf"></label>
+                        </div>
+                        <div class="row">
+                            <label class="bu-control-label col-xs-4">PO :</label>
+                            <label class="bu-control-datalabel col-xs-3" id="lblpo"></label>
+                        </div>
+                    </div>
+                    <div class="col-xs-6">
+                        <div class="row">
+                            <label class="bu-control-label col-xs-4">Factory :</label>
+                            <label class="bu-control-datalabel col-xs-6" id="dataLabelFactory"></label>
+                        </div>
+                        <div class="row">
+                            <label class="bu-control-label col-xs-4">Team :</label>
+                            <label class="bu-control-datalabel col-xs-6" id="dataLabelTeam"></label>
+                        </div>
+                        <div class="row">
+                            <label class="bu-control-label col-xs-4">Operation :</label>
+                            <label class="bu-control-datalabel col-xs-6" id="dataLabelOperation"></label>
+                        </div>
+                    </div>
+                </div>
+                 
+                <div class="row"  style="padding-top: 50px;">
+                    <div class="col-md-2" style="margin-left: 0px; padding-right: 0px; padding-left: 0px;">
+                        <label class="bu-control-label">Sober Sheet No :</label>
+                    </div>
+                    <div class="col-md-4" style="padding-left: 0px;">
+                        <input id="SoberSheetNo" class="bu-form-control" required />
+                    </div>
+                     <div class="col-md-3" style="padding-left: 10px;">
+                        <button class="addButton" id="btnLoard" onclick="LoadSoberSheetGrid()">Loard</button>
+                    </div>
+                                                              
+                </div>
+        </div>
+            </div>
+        </div>
+        
+    <div class="row" style="height: 10px"></div>
+    <div class="row">
+        <div class="col-md-12">
+            <div class="bu-form-control" id="dgGQGrid"></div>
+            <div id="dgGQGrid2"></div>
+            <div class="bu-form-control" id="dgGQGrid3"></div>
+        </div>
+    </div>
+    <div class="row" style="height: 10px"></div>
+    <div class="row">
+        <div class="col-md-12" style="text-align: left">
+            <button class="k-button" id="btnSubmit" onclick="SaveGridData()">Submit</button>
+            <button id="btnClearAll" class="k-button">Clear All</button>
+        </div>
+    </div>
+
+
+</div>

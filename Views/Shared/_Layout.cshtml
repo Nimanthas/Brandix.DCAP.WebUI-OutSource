@@ -1,0 +1,282 @@
+﻿@inject Brandix.DCAP.WebUI.Services.IUIConfiguration AppSettings;
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>
+        Brandix DCAP
+    </title>   
+
+    <environment names="Development">
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.css" />
+    <link rel="stylesheet" href="~/css/site.css" />
+    <link rel="stylesheet" href="~/css/home.css" />
+    <link rel="stylesheet" href="~/css/kendo/kendo.common-bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/kendo/kendo.bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/kendo/kendo.common.min.css" />
+    <link rel="stylesheet" href="~/css/kendo/kendo.default.min.css" />
+    <link rel="stylesheet" href="~/css/kendo/kendo.bootstrap.mobile.min.css" />    
+    
+    </environment>
+    <environment include="Development">
+        <script src="~/lib/jquery/dist/jquery.js"></script>
+        <script src="~/lib/bootstrap/dist/js/bootstrap.js"></script>
+        <script src="~/js/site.js" asp-append-version="true"></script>
+        <script src="~/js/fontawesome-all.min.js"></script> 
+        <script src="~/js/kendo/kendo.all.min.js"></script>
+        <script src="~/js/kendo/kendo.aspnetmvc.min.js"></script> 
+        <script src="~/js/knockout-3.4.2.js"></script>
+        <script src="~/js/enums.js"></script>
+        <script src="~/js/shortcuts.js"></script>
+        <script src="~/js/jzip/dist/jszip.js"></script>
+        <script src="~/js/jzip/dist/jszip.min.js"></script> 
+        <script src="~/js/pako.min.js"></script>
+        
+        <script src="~/js/jquery-1.9.1.min.js"></script>  
+        <script src="~/js/jszip.min.js"></script>    
+    </environment>
+    <environment include="Staging,Production">
+        <link rel="stylesheet" href="https://ajax.aspnetcdn.com/ajax/bootstrap/3.3.7/css/bootstrap.min.css"
+              asp-fallback-href="~/lib/bootstrap/dist/css/bootstrap.min.css"
+              asp-fallback-test-class="sr-only" asp-fallback-test-property="position" asp-fallback-test-value="absolute" />
+        <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+        <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+        <link rel="stylesheet" href="~/css/home.css" asp-append-version="true" />
+        <link rel="stylesheet" href="~/css/kendo/kendo.common-bootstrap.min.css" />
+        <link rel="stylesheet" href="~/css/kendo/kendo.bootstrap.min.css" />
+        <link rel="stylesheet" href="~/css/kendo/kendo.common.min.css" />
+        <link rel="stylesheet" href="~/css/kendo/kendo.default.min.css" />
+        <link rel="stylesheet" href="~/css/kendo/kendo.bootstrap.mobile.min.css" />
+        <script src="~/js/kendo/kendo.all.min.js"></script>
+
+        <script src="~/js/jquery-1.9.1.min.js"></script>
+        <script src="~/js/jszip.min.js"></script>
+    </environment>    
+    <environment include="Staging,Production">
+        <script src="https://ajax.aspnetcdn.com/ajax/jquery/jquery-3.3.1.min.js"
+                asp-fallback-src="~/lib/jquery/dist/jquery.min.js"
+                asp-fallback-test="window.jQuery"
+                crossorigin="anonymous"
+                integrity="sha384-tsQFqpEReu7ZLhBV2VZlAu7zcOV+rXbYlF2cqB8txI/8aZajjp4Bqd+V6D5IgvKT">
+        </script>
+        <script src="https://ajax.aspnetcdn.com/ajax/bootstrap/3.3.7/bootstrap.min.js"
+                asp-fallback-src="~/lib/bootstrap/dist/js/bootstrap.min.js"
+                asp-fallback-test="window.jQuery && window.jQuery.fn && window.jQuery.fn.modal"
+                crossorigin="anonymous"
+                integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa">
+        </script>
+        <script src="~/js/site.js" asp-append-version="true"></script>
+        <script src="~/js/fontawesome-all.min.js"></script>
+        <script src="~/js/kendo/kendo.all.min.js"></script>
+        <script src="~/js/kendo/kendo.aspnetmvc.min.js"></script>
+        <script src="~/js/knockout-3.4.2.js"></script>
+        <script src="~/js/enums.js"></script>
+        <script src="~/js/shortcuts.js"></script> 
+        <script src="~/js/jzip/dist/jszip.js"></script> 
+        <script src="~/js/jzip/dist/jszip.min.js"></script> 
+        <script src="~/js/pako.min.js"></script> 
+
+        <script src="~/js/jquery-1.9.1.min.js"></script>
+        <script src="~/js/jszip.min.js"></script>
+    </environment>
+
+<script type="text/javascript">
+    const APIURL = Object.create(null, {
+        key: {
+            get: () => "@AppSettings.APIURL"
+        }
+    });
+    const SessionTimeOut = Object.create(null, {
+        key: {
+            get: () => "@AppSettings.SessionTimeOut"
+        }
+    });
+    const WebUIURL = Object.create(null, {
+        key: {
+            get: () => "@AppSettings.WebUIURL"
+        }
+    });
+    Object.freeze(APIURL);
+    Object.freeze(WebUIURL);
+    Object.freeze(SessionTimeOut);
+
+    //Auto sign out when client is idle
+    var idleTime = 0;
+
+    //Increment the idle time counter every minute.
+    function checkIdle() {
+        console.log('Called checkIdle method.');
+        var idleInterval = setInterval(timerIncrement, 60000); // 1 minute
+
+        //Zero the idle timer on mouse movement.
+        $(this).mousemove(function(e) {
+            idleTime = 0;
+        });
+        $(this).keypress(function(e) {
+            idleTime = 0;
+        });
+    }
+    
+    function timerIncrement() {
+        idleTime = idleTime + 1;
+        if (idleTime >= "@ViewBag.SessionTimeOut") {
+            onSignOut();
+        }
+    }
+
+    function onSessionTimeOut() {
+        sessionStorage.setItem("IsSignedIn", Answer.No);
+        sessionStorage.setItem("UserId", "");
+        $('#toolBarLoggedinUser').html(sessionStorage.getItem("UserId"));
+        $('#loginBar').hide();        
+        var okbtnFunc = function() {
+            window.location.href = "Login";
+        };
+        msgBox.show($("#msgSessionTimeOut").html(), "Information", okbtnFunc);
+    }
+
+    function onSignOutClick() {
+        sessionStorage.setItem("IsSignedIn", Answer.No);
+        sessionStorage.setItem("UserId", "");
+        $('#toolBarLoggedinUser').html(sessionStorage.getItem("UserId"));
+        $('#loginBar').hide();
+        window.location.href = "Login";
+    }
+
+    function searchRefractive(value,thisenum) {
+        for (prop in thisenum) {
+            if (thisenum[prop] == value) {
+                return prop;
+            }
+        }
+    }
+
+    function clickon(loc) {
+      window.location.href = loc;
+    }
+
+    function close_window() {
+        if (confirm("Close Window?")) {
+            window.opener = window;
+            window.close();
+        }
+    }
+
+    
+  function CloseWindow()
+  {
+  window.close();
+  }
+
+  function CloseOpenerWindow()
+  {
+  window.opener = window;
+  window.close();
+  }
+
+  function CloseOpenerHikks()
+  {
+  window.opener = "HikksNotAtHome";
+  window.close();
+  }
+
+  function CloseWithWindowOpenTrick()
+  {
+  var objWindow = window.open(location.href, "_self");
+  objWindow.close();
+  }
+  
+
+</script>
+
+</head>
+<body class="body body-login" id="sitebody">     
+    <partial name="_CookieConsentPartial" />
+    
+    <nav class="navbar navbar-inverse">
+        <div class="row">
+            <div class="col-lg-1"><button id="printGatePassRequestButton" class="k-button update-request-status" style=" height: 38px; background-color: #ffffff61 !important;" onclick="clickon('Menu')"><i class="fa fa-home fa-2x" aria-hidden="true"></i></button></div>
+            
+            <div class="col-lg-6" style="width: 60%; margin-left: -90px;" id="pageTitleBar"></div>
+            
+            <div class="col-lg-3" style="width: 35%; text-align: right;">
+                <div class="col-lg-6">
+                    <div id="timer" class="timer" ></div>
+                </div>
+                <div class="col-lg-6" id="loginBar" style="padding-top: 6px;">
+                    <span id="toolBarLoggedinUser" class="toolBarLoggedinUser"></span>
+                    <span id="toolBarSignout" ><i class="fas fa-power-off toolBarIcon" title="Sign Out" onclick="onSignOutClick()"></i></span>
+                </div>
+            </div>
+        </div> 
+    </nav> 
+
+    <div class="container body-content">        
+        <div class="hiddenItemsWrapper">
+            <div id="msgWindow" class="msgWindow">
+
+                <div class="msgWindowContent" id="msgWindowContent">
+                    <div></div>
+                    <div class="row">
+                        <div class="col-lg-12" id="msgSin"></div>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-12" id="msgEng"></div>
+                    </div>
+                    <div class="row"></div>
+                    <div class="row col-lg-12">
+                        <button id="btnMsgWinOK" class="msgWindowBtn">OK</button>
+                    </div>
+                </div>
+
+            </div>
+            <div id="msgWindowConfirm" class="msgWindow">
+
+                <div class="msgWindowContent" id="msgWindowContentC">
+                    <div></div>
+                    <div class="row">
+                        <div class="col-lg-12" id="msgSinC"></div>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-12" id="msgEngC"></div>
+                    </div>
+                    <div class="row">
+                        <div class="row col-lg-5" style="margin-left: 90px !important;">
+                            <button id="btnMsgWinOKC" class="msgWindowBtn">OK</button>
+                        </div>
+                        <div class="row col-lg-5">
+                            <button id="btnMsgWinCancelC" class="msgWindowBtn">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div id="msgWarningIcon">
+                <div class="row">
+                    <div class="col-lg-1" style="width:1%;"><i class="fas fa-times-circle msgWarningIcon"></i></div>
+                    <div class="col-lg-8" style="text-align: left; width:50%;"><span id="msgWindowTitle" class="msgWindowTitle"></span></div>
+                    <div class="col-lg-2" style="width:40%;"><span id="msgErroCode" class="msgErroCode"></span></div>
+                </div>
+            </div>
+            <div id="msgInformationIcon">
+                <i class="fas fa-info-circle" style="color:rgb(13, 39, 189)"></i>
+            </div>
+            <div id="msgSuccIcon">
+                <i class="fas fa-check-circle" style="color:green"></i>
+            </div>
+
+            <span id="validationMsgRequiredField" data-lableId="validation-01">* Value is required for this field</span>
+            <span id="validationMsgRequiredOpt" data-lableId="validation-02">* At least one option must be checked</span>
+            <span id="msgSessionTimeOut" data-lableId="validation-03">Your session has timed out. Please login again</span>
+        </div>
+            
+        @RenderBody()       
+        
+        <footer class="mainFooter">                 
+            <div>Developed and maintained by Brandix ICT - &copy; 2018 - Brandix</div>
+        </footer>
+    </div>    
+</body>
+</html>

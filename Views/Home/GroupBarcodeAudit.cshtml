@@ -1,0 +1,1453 @@
+﻿@{
+    Layout = "_Layout";
+}
+<script type="text/javascript">
+    //Declare variable for Models and status
+    var isValidClient = Answer.Null;
+    var clientconfig = null;
+    var userPermissionList = null;
+    var selectedScanOption = ScanOption.Non;
+    var selectedTrxMode = TransactionMode.Non;
+    var selectedScanAction = Action.Non;
+    var selectedFunction = Answer.Null;
+    var scannedCount = 0;
+    var scannedStatus = ScannedStatus.Non;
+    var isScanCompleted = false;
+    var clientIP = null;
+    var txUser = null;
+    var styleDataSource = null;
+    var selectedGroupTag = null;
+    var selectedGatePass = null;
+    var selectedScrapReason = null;
+    var selectedDefectOpp = null;
+    var selectedWfConfig = null;
+    var selectedGroupTagNo = null;
+    var selectedGroupTagDesc = null;
+    var selectedScanCounterId = null;
+    var selectedSheduleNo = null;
+
+    // var selectedScanCounterPO = null;    
+    // var selectedScanCounterVal = null; 
+
+    var wfid = null;
+    var goodQty = 0;
+    var scrapQty = 0;
+    var reworkQty = 0;
+    var flag = true;
+
+    var groupTagSearchGrid = null;
+    var groupBarcodeSearchWindow = null;
+    var scrapReasonSearchGrid = null;
+    var scrapReasonSearchWindow = null;
+    var poCounterResetWindow = null;
+    var gatePassSearchWindow = null;
+    var gatePassSearchGrid = null;
+    var scannedBarcode = null;
+    var POCounters = null;
+    var isValidBarcode = false;
+    var WFDEPInstId = 0;
+
+    var ScanDataBackup = null;
+
+    var sacanComplete = true;
+    var errorbeforestauscomplete = null;
+
+    var runningPOCounters = [];
+    var lastUpdatedCounterId = null;
+    var haltsystem = false;
+
+    var previoushour = null;
+
+    //Page Load Event
+    $(document).ready(function () {
+        refreshmsgBoxHeaderStyle();
+        EnableControllers();
+        sacanComplete = true;
+        errorbeforestauscomplete = '';
+
+        $('#groupTagSearchBtn').focus();
+        $("#sitebody").append(
+            '<div id="ajaxBusy" class="ajaxBusy"></div>'
+        );
+        $("#ajaxBusy").hide();
+
+        $("#barcodeTableView").hide();
+        $("#errorbarcodeTableView").hide();
+
+        //$("#ddlMainOperation").data("kendoDropDownList").dataSource.data([]);
+        initializeControlEvents();
+        getSessionInfo();
+        checkLoginStatus();
+        checkIdle();
+        setPageControlsStartupStatus();
+        initializeFunctionKeys();
+        populatePermissionList();
+        resetControls();
+
+        $(document.body).keydown(function (e) {
+            if (e.altKey && e.keyCode == 87) {
+                $('#groupTagSearchGrid').data("kendoGrid").table.focus();
+            }
+        });
+
+        $(document).on('keydown', disableFunctionKeys);
+        (function blink() {
+            $('.blinktext').fadeOut(150).fadeIn(150, blink);
+        })();
+        $('#pageTitleBar').html('<i class="fas fa-barcode pageMainIcon"></i><span class="pageTitle">DCap - Group Tag Audit</span><button id="new-request-button" class="k-button" style="background-color: #04630; border: none; font-size: 18px; font-weight: 600; color: #000000; margin-left: 25px;" onclick="openGroupBarcodeDetail()"><span>Barcode Detail</span></button>');
+
+
+        //Enable barcode scan in the begging
+        //$("#barcodeBcodeTxt").removeAttr("disabled"); 
+        //$("#barcodeBcodeTxt").focus();
+
+        $('#sitebody').removeClass('body-login');
+        if (isValidClient == Answer.Null) {
+            window.location.href = "Login";
+        }
+    });
+
+    function openGroupBarcodeDetail() {
+        window.location.href = "BarcodeDetail";
+    }
+
+    function disableFunctionKeys(e) { //NE
+        var functionKeys = new Array(112, 113, 114, 115, 117, 118, 119, 120, 121);
+        if (functionKeys.indexOf(e.keyCode) > -1 || functionKeys.indexOf(e.which) > -1) {
+            e.preventDefault();
+        }
+    }
+
+    function checkLoginStatus() { //NE
+        //console.log('Called checkLoginStatus method. IsSignedIn = ' + sessionStorage.getItem("IsSignedIn"));
+        if (sessionStorage.getItem("UserId") != "") {
+            $("#toolBarLoggedinUser").html(sessionStorage.getItem("UserId"));
+        } else {
+            $("#toolBarLoggedinUser").html("");
+        }
+        if (sessionStorage.getItem("IsSignedIn") == Answer.Null || sessionStorage.getItem("IsSignedIn") == Answer.No) {
+            $("#loginBar").hide();
+            window.location.href = "BarcodeScanErrorCorrector";
+        } else {
+            $("#loginBar").show();
+        }
+    }
+
+    function initializeFunctionKeys() { //NE
+        shortcut.add("F1", function () {
+            selectTrxModeGood();
+        });
+    }
+
+    function checkBarcodeIsValid() {
+        $('#status').html('');
+        DisableControllers();
+        flag = true;
+        if (!haltsystem) {
+            refreshmsgBoxHeaderStyle();
+            sacanComplete = true;
+            errorbeforestauscomplete = '';
+            var StyleNo = "";
+            //console.log('Calling GetStyleScheduleByBarcode API by Barcode:' + $("#barcodeBcodeTxt").val());
+
+            $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetStyleScheduleByBarcode?Barcode=' + $("#barcodeBcodeTxt").val(),
+                type: 'GET',
+                dataType: 'json',
+                //async: false,
+                contentType: 'application/json; charset=utf-8',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (data) {
+                    //console.log("Calling GetStyleScheduleByBarcode API succeded")
+                    //If the barcode is exist in the db
+                    if (data != null) {
+                        //console.log('Barcode ' + $("#barcodeBcodeTxt").val() + ' exists. Returned value..');
+                        //console.log(data);
+
+                        scannedBarcode = data;
+                        selectedGroupTag = data;
+                        selectedGroupTagNo = data.styleNo;
+                        selectedGroupTagDesc = data.StyleDesc;
+
+                        //Check whether barcode style is matched with the user input // scannedBarcode.styleNo != $("#barcodeGroupTagTxt").val()
+                        if (false) {
+                            msgBox.show('තෝරන ලද ස්ටයිල් බාර්කෝඩ් කේතය සමඟ නොගැලපේ. නැවත පරීක්ෂා කරන්න.', 'Selected Style does not match with Barcode.', 'අවවාදයයි / Warning', 'BS10', 'Warning', function () {
+                                scannedBarcode = null;
+                                $("#barcodeBcodeTxt").val("");
+                                $("#barcodeBcodeTxt").focus();
+                            });
+                            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Selected Style does not match with Barcode.'
+                            sacanComplete = false;
+                            flag = false;
+                            EnableControllers();
+                            return;
+                        }
+                        //Check whether barcode color is matched with the user input //scannedBarcode.colorId != 0 && selectedGatePass != null && scannedBarcode.colorId != selectedGatePass.l4id
+                        else if (false) {
+                            msgBox.show('තෝරන ලද වර්ණය බාර්කෝඩ් කේතය සමඟ නොගැලපේ. නැවත පරීක්ෂා කරන්න.', 'Selected Color does not match with Barcode.', 'අවවාදයයි / Warning', 'BS11', 'Warning', function () {
+                                scannedBarcode = null;
+                                $("#barcodeBcodeTxt").val("");
+                                $("#barcodeBcodeTxt").focus();
+                            });
+                            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Selected Color does not match with Barcode.'
+                            sacanComplete = false;
+                            flag = false;
+                            EnableControllers();
+                            return;
+                        }
+                        else {
+                            isValidBarcode = true;
+                            $('#scheduleDataLabel').html(scannedBarcode.scheduleNo);
+                            $('#poDataLabel').html(scannedBarcode.poNo);
+                            $('#dataLabelzFeature').html(scannedBarcode.zfeature);
+                            $('#sizeDataLabel').html(scannedBarcode.sizeDesc);
+                            $('#bcColorDataLabel').html(scannedBarcode.colorDesc);
+                            $('#ShadeLotPatt').html(scannedBarcode.lotNo + "/" + scannedBarcode.pattern);
+                            updateTable($("#barcodeBcodeTxt").val());
+                        }
+
+                        selectedSheduleNo = data.scheduleNo;
+                    }
+                    else {
+                        //console.log('Barcode ' + $("#barcodeBcodeTxt").val() + ' not exists.');
+                        isValidBarcode = false;
+                        flag = false;
+                        msgBox.show('මෙම බාර්කෝඩ් අගය වලංගු නැත.', 'This barcode is not valid.', 'අවවාදයයි / Warning', 'BS12', 'Warning', function () {
+                            scannedBarcode = null;
+                            $("#barcodeBcodeTxt").val("");
+                            $("#barcodeBcodeTxt").focus();
+                            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'This barcode is not valid.'
+                            sacanComplete = false;
+                            EnableControllers();
+                        });
+                    }
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    flag = false;
+                    //formatErrorMessage(jqXHR, errorThrown, "BarcodeScanErrorCorrector");
+                    msgBox.show('දෝෂයකි. කරුණාකර නැවත උත්සාහ කරන්න..' , 'Error. Please try again.', 'Warning', 'BU05', 'Warning', null);
+                    errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Get Shedulle by BarcodeScanErrorCorrector API Error.'
+                    sacanComplete = false;
+                    EnableControllers();
+                }
+            });
+        } else {
+            msgBox.show('ස්කෑන් පද්ධතිය නවතා දමා ඇත. කවුන්ටර හෝ වෙනත් වලංගු කිරීම් සඳහා පරීක්ෂා කරන්න',
+                'The scan system is on halt. check for counter or other validations',
+                'අවවාදයයි / Warning',
+                'BS22',
+                'Warning',
+                null);
+            $('#barcodeBcodeTxt').val('');
+            $('#barcodeBcodeTxt').focus();
+            EnableControllers();
+        }
+    }
+
+    function updateTable(barcode) {
+        var GridData = $("#barcodeBreakdowbDetails").data('kendoGrid').dataSource.data();
+        var GridDataS = [];
+        var index = -1;
+        var successd = false;
+        $("#barcodeBreakdowbDetails").data('kendoGrid').dataSource.data([]);
+        $.each(GridData, function (id, counter) {
+            if (counter.barcode == barcode) {
+                counter.status = counter.status + 1;
+                index = id;
+                if(counter.status == 1) {
+                    $('#status').html('Found');
+                    $('#scannedQty').html(parseInt($('#scannedQty').html()) + counter.status);
+                } else if(counter.status > 1) {
+                    $('#status').html('Duplicate');
+                    $('#duplicateScanQty').html(parseInt($('#duplicateScanQty').html()) + 1);
+                }
+                $('#status').removeClass('blinktext');
+                $('#status').removeClass('control-datalabel-scannedstatus-fail');
+                $('#status').addClass('control-datalabel-scannedstatus-pass');
+                successd = true;
+            } else {
+                if ($('#status').html() != 'Found' && $('#status').html() != 'Duplicate') {
+                    $('#status').html('Not Found');
+                    $('#status').addClass('blinktext');
+                    $('#status').addClass('control-datalabel-scannedstatus-fail');
+                    $('#status').removeClass('control-datalabel-scannedstatus-pass');
+                }
+            }
+            GridDataS.push(counter);
+        });
+
+        var GridDataD = $("#errorBarcodeBreakdowbDetails").data('kendoGrid').dataSource.data();
+        console.log(scannedBarcode);
+        if(successd == false) {
+            var rowd = {
+                status: 0,
+                barcode: barcode,
+                styleId: scannedBarcode.styleId,
+                styleNo: scannedBarcode.styleNo,
+                scheduleId: scannedBarcode.scheduleId,
+                scheduleNo: scannedBarcode.scheduleNo,
+                PONo: scannedBarcode.poNo,
+                zFeature: scannedBarcode.zfeature,
+                colorId: scannedBarcode.colorId,
+                colorNo: scannedBarcode.colorDesc,
+                sizeId: scannedBarcode.sizeId,
+                sizeDesc: scannedBarcode.sizeDesc,
+                moNo: "",
+                bagBarcode: "",
+                travelBarcode: "",
+                qty01: 1,
+                qty02: 0,
+                qty03: 0,
+            }
+            GridDataD.push(rowd);
+        }
+        if(GridDataD.length != 0) {
+            $("#errorBarcodeBreakdowbDetails").data('kendoGrid').dataSource.data(GridDataD);
+            $("#errorbarcodeTableView").show();
+        } else {
+            $("#errorbarcodeTableView").hide();
+        }
+        $("#barcodeBreakdowbDetails").data('kendoGrid').dataSource.data(GridDataS);
+        $('#lastBarcodeDataLabel').html($("#barcodeBcodeTxt").val());
+        if(index != -1) {
+            var grid = $("#barcodeBreakdowbDetails").data("kendoGrid");
+            grid.select("tr:eq("+index+")");
+        }
+        EnableControllers();
+        $("#barcodeBcodeTxt").val('');
+        $("#barcodeBcodeTxt").focus();
+    }
+
+    function updateBarcodeScan() {
+        refreshmsgBoxHeaderStyle();
+        var selectedOperation = $("#ddlMainOperation").val();
+        //Check whether barcode style is matched with the user input
+        if (scannedBarcode.styleNo != $("#barcodeGroupTagTxt").val()) {
+            msgBox.show('තෝරන ලද ස්ටයිල්ය බාර්කෝඩ් කේතය සමඟ නොගැලපේ. නැවත පරීක්ෂා කරන්න.', 'Selected Style does not match with Barcode.', 'අවවාදයයි / Warning', 'BS15', 'Warning', function () {
+                $('#groupTagSearchBtn').focus();
+            });
+            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Selected Style does not match with Barcode.'
+            sacanComplete = false;
+            EnableControllers();
+            return;
+        }
+        //Check whether barcode color is matched with the user input
+        else if (scannedBarcode.colorId != 0 && selectedGatePass != null && scannedBarcode.colorId != selectedGatePass.l4id) {
+            msgBox.show('තෝරන ලද වර්ණය බාර්කෝඩ් කේතය සමඟ නොගැලපේ. නැවත පරීක්ෂා කරන්න.', 'Selected Color does not match with Barcode.', 'අවවාදයයි / Warning', 'BS16', 'Warning', function () {
+                $('#gatePassSearchBtn').focus();
+            });
+            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Selected Color does not match with Barcode.'
+            sacanComplete = false;
+            EnableControllers();
+            return;
+        }
+        else if (!userPermissionList.some(permission => permission.functionId === AccessibleFunctions.BarcodeErrorCorrection)) {
+            msgBox.show('ඔබට තෝරන ලද ස්කෑන් ක්‍රමය සඳහා අවසර නැත.', 'You do not have access to selected Scan Action.', 'අවවාදයයි / Warning', 'BS19', 'Warning', null);
+            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'You do not have access to selected Scan Action.'
+            sacanComplete = false;
+            EnableControllers();
+            return;
+        }
+        else if (selectedOperation == null || selectedOperation <= 0 || selectedOperation == "") {
+            msgBox.show('වලංගු මෙහෙයුමක් තෝරන්න.', 'select a valid operation. (value:' + $("#ddlMainOperation").val() + ')', 'අවවාදයයි / Warning', 'BS19', 'Warning', null);
+            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'You do not have access to selected Scan Action.'
+            sacanComplete = false;
+            EnableControllers();
+            return;
+        }
+        else {
+            var ScannedItem = {
+                "StyleId": scannedBarcode.styleId,
+                "ScheduleId": scannedBarcode.scheduleId,
+                "ColorId": (scannedBarcode === null ? 0 : scannedBarcode.colorId),
+                "ColorIdUI": (selectedGatePass === null ? 0 : selectedGatePass.l4id),
+                "SizeId": scannedBarcode.sizeId,
+                "Barcode": $("#barcodeBcodeTxt").val(),
+                "OperationCode": $("#ddlMainOperation").val(),
+            };
+
+            //console.log('Assigning Bag Barcode Details');
+
+            //console.log('Scanned Item (Sent to DCAP db)..');
+            //console.log(ScannedItem);
+            $('#lastBarcodeDataLabel').html($("#barcodeBcodeTxt").val());
+
+            loadOperationHistory();
+            loadTablerValues(ScannedItem);
+        }
+    }
+
+    function initializeControlEvents() { //ND
+        refreshmsgBoxHeaderStyle();//
+
+        $("#barcodeBreakdowbDetails").kendoGrid({
+            autoBind: false,
+            toolbar: ["pdf", "excel"],
+            pdf: {
+                allPages: true,
+                author: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                creator: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                date: (new Date()).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
+                fileName: "Barcode Summary Report"
+            },
+            excel: {
+                allPages: true,
+                fileName: "Barcode Summary Report.xlsx",
+                filterable: true
+            },
+            dataSource: {
+                schema: {
+                    model: {
+                        id: "barcode",
+                        fields: {
+                            status: { type: "string" },
+                            barcode: { type: "string" },
+                            styleId: { type: "number" },
+                            styleNo: { type: "string" },
+                            scheduleId: { type: "number" },
+                            scheduleNo: { type: "string" },
+                            PONo: { type: "string" },
+                            zFeature: { type: "string" },
+                            colorId: { type: "number" },
+                            colorNo: { type: "string" },
+                            sizeId: { type: "number" },
+                            sizeDesc: { type: "string" },
+                            moNo: { type: "string" },
+                            bagBarcode: { type: "string" },
+                            travelBarcode: { type: "string" },
+                            qty01: { type: "number" },
+                            qty02: { type: "number" },
+                            qty03: { type: "number" },
+                        }
+                    }
+                },
+                type: "json"
+            },
+            reorderable: true,
+            resizable: true,
+            scrollable: true,
+            sortable: true,
+            filterable: true,
+            selectable: "multiple, row",
+            change: function(e) {
+                var scrollContentOffset = this.element.find("tbody").offset().top;
+                var selectContentOffset = this.select().offset().top;
+                var distance = selectContentOffset - scrollContentOffset;
+
+                this.element.find(".k-grid-content").animate({
+                    scrollTop: distance
+                }, 400);
+            },
+            dataBound: function (e) {
+                // get the index of the UnitsInStock cell
+                var columns = e.sender.columns;
+                var columnIndex = this.wrapper.find(".k-grid-header [data-field=" + "status" + "]").index();
+                console.log('');
+
+                // iterate the table rows and apply custom row and cell styling
+                var rows = e.sender.tbody.children();
+                for (var j = 0; j < rows.length; j++) {
+                    console.log(columnIndex);
+                    var row = $(rows[j]);
+                    var dataItem = e.sender.dataItem(row);
+
+                    var cell = row.children().eq(columnIndex);
+                    console.log(status);
+                    cell.addClass(status);
+                }
+            },
+            pageable: {
+                pageSizes: true,
+                buttonCount: 10
+            },
+            dataBound: function (e) {
+                var cell = this.tbody.find("tr[role='row'] td:first");
+                this.current(cell);
+            },
+            columns: [
+                {title:"Status",field:"status",width:"28%", filterable: false, template: "#if (status == '0' ) {# <div class='mb-2 mr-2 badge badge-primary const-width-badge' style='width: 90%; height: 16px; font-size: 16px; margin-left: -3px;'>Loaded" + 
+                        "</div> #} else if (status == '1'){ # <div class='mb-2 mr-2 badge badge-success const-width-badge' style='width: 90%; height: 16px; font-size: 16px; margin-left: -3px;'>Scanned" +
+                        "</div> #} else if (status >= '2'){ # <div class='mb-2 mr-2 badge badge-warning const-width-badge' style='width: 90%; height: 16px; font-size: 16px; margin-left: -3px;'>Scanned (dup)" +
+                        "</div> #}#" },
+                { field: "barcode", title: "Barcode No", width: "21%" },
+                { field: "styleId", title: "l1 No", width: "10%", hidden: true },
+                { field: "styleNo", title: "Style", width: "15%" },
+                { field: "scheduleId", title: "l2", width: "9%", hidden: true },
+                { field: "scheduleNo", title: "Shedule No", width: "17%" },
+                { field: "PONo", title: "PO No", width: "15%" },
+                { field: "zFeature", title: "Z-Feature", width: "16%" },
+                { field: "colorId", title: "l4 No", width: "10%", hidden: true },
+                { field: "colorNo", title: "Color", width: "30%" },
+                { field: "sizeId", title: "l4 No", width: "10%", hidden: true },
+                { field: "sizeDesc", title: "Size", width: "12%" },
+                { field: "moNo", title: "MO No.", width: "19%" },
+                { field: "bagBarcode", title: "Bag Barcode", width: "17%" },
+                { field: "travelBarcode", title: "Travel Barcode", width: "26%" },
+                { field: "qty01", title: "Good", width: "10%", filterable: false },
+                { field: "qty02", title: "Scrap", width: "10%", filterable: false },
+                { field: "qty03", title: "Rework", width: "11%", filterable: false }
+            ]
+        }).data("kendoGrid");
+
+        $("#errorBarcodeBreakdowbDetails").kendoGrid({
+            autoBind: false,
+            toolbar: ["pdf", "excel"],
+            pdf: {
+                allPages: true,
+                author: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                creator: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                date: (new Date()).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
+                fileName: "Error Barcode Summary Report"
+            },
+            excel: {
+                allPages: true,
+                fileName: "Error Barcode Summary Report.xlsx",
+                filterable: true
+            },
+            dataSource: {
+                schema: {
+                    model: {
+                        id: "barcode",
+                        fields: {
+                            status: { type: "string" },
+                            barcode: { type: "string" },
+                            styleId: { type: "number" },
+                            styleNo: { type: "string" },
+                            scheduleId: { type: "number" },
+                            scheduleNo: { type: "string" },
+                            PONo: { type: "string" },
+                            zFeature: { type: "string" },
+                            colorId: { type: "number" },
+                            colorNo: { type: "string" },
+                            sizeId: { type: "number" },
+                            sizeDesc: { type: "string" },
+                            moNo: { type: "string" },
+                            bagBarcode: { type: "string" },
+                            travelBarcode: { type: "string" },
+                            qty01: { type: "number" },
+                            qty02: { type: "number" },
+                            qty03: { type: "number" },
+                        }
+                    }
+                },
+                type: "json"
+            },
+            reorderable: true,
+            resizable: true,
+            scrollable: true,
+            sortable: true,
+            filterable: true,
+            pageable: {
+                pageSizes: true,
+                buttonCount: 10
+            },
+            columns: [
+                {title:"Status",field:"status",width:"28%", filterable: false, template: "#if (status == '0' ) {# <div class='mb-2 mr-2 badge badge-secondary const-width-badge' style='width: 90%; height: 16px; font-size: 16px; margin-left: -3px;'>Not Found" + 
+                        "</div> #} else if (status == '1'){ # <div class='mb-2 mr-2 badge badge-secondary const-width-badge' style='width: 90%; height: 16px; font-size: 16px; margin-left: -3px;'>Not Found" +
+                        "</div> #} else if (status >= '2'){ # <div class='mb-2 mr-2 badge badge-secondary const-width-badge' style='width: 90%; height: 16px; font-size: 16px; margin-left: -3px;'>Not Found (dup)" +
+                        "</div> #}#" },
+                { field: "barcode", title: "Barcode No", width: "21%" },
+                { field: "styleId", title: "l1 No", width: "10%", hidden: true },
+                { field: "styleNo", title: "Style", width: "15%" },
+                { field: "scheduleId", title: "l2", width: "9%", hidden: true },
+                { field: "scheduleNo", title: "Shedule No", width: "17%" },
+                { field: "PONo", title: "PO No", width: "15%" },
+                { field: "zFeature", title: "Z-Feature", width: "16%" },
+                { field: "colorId", title: "l4 No", width: "10%", hidden: true },
+                { field: "colorNo", title: "Color", width: "30%" },
+                { field: "sizeId", title: "l4 No", width: "10%", hidden: true },
+                { field: "sizeDesc", title: "Size", width: "12%" },
+                { field: "moNo", title: "MO No.", width: "19%" },
+                { field: "bagBarcode", title: "Bag Barcode", width: "17%" },
+                { field: "travelBarcode", title: "Travel Barcode", width: "26%" },
+                { field: "qty01", title: "Good", width: "10%", filterable: false },
+                { field: "qty02", title: "Scrap", width: "10%", filterable: false },
+                { field: "qty03", title: "Rework", width: "11%", filterable: false }
+            ]
+        }).data("kendoGrid");
+
+
+        $('#groupTagSearchBtn').click(function () {
+            if (selectedScanOption != ScanOption.Non) {
+                resetControls();
+                setPageControlsStartupStatus();
+            }
+
+            groupBarcodeSearchWindow = $("#groupBarcodeSearchWindow").kendoWindow({
+                width: "80%",
+                height: "60%",
+                title: "Group Tag Search",
+                actions: [
+                    "Close"
+                ],
+                modal: true,
+                resizable: false,
+                draggable: false,
+                pinned: true,
+                activate: function () {
+                    $("#groupTagSearchWindowGroupTagTxt").select();
+                },
+                close: onGroupTagSearchClose
+            }).data("kendoWindow");
+
+            groupBarcodeSearchWindow.wrapper.find('.k-window-titlebar').css({
+                'background-color': 'black',
+                'font-size': '18px',
+                'color': 'white'
+            });
+
+            groupTagSearchGrid = $("#groupTagSearchGrid").kendoGrid({
+                autoBind: false,
+                dataSource: {
+                    transport: {
+                        read: '@ViewBag.APIURL/Lookup/GetGroupTagDetailsByGroupBarcode'
+                    },
+                    schema: {
+                        model: {
+                            fields: {
+                                styleId: { type: "number" },
+                                styleNo: { type: "string" },
+                                scheduleId: { type: "number" },
+                                scheduleNo: { type: "string" },
+                                colorId: { type: "number" },
+                                colorNo: { type: "string" },
+                                bagBarcode: { type: "string" },
+                                txnMode: { type: "number" },
+                                qty01: { type: "number" },
+                                qty02: { type: "number" },
+                                qty03: { type: "number" }
+                            }
+                        }
+                    },
+                    type: "json"
+                },
+                height: "75%",
+                width: "90%",
+                scrollable: true,
+                change: onChangeGroupTag,
+                navigatable: true,
+                selectable: "multiple cell",
+                dataBound: function (e) {
+                    var cell = this.tbody.find("tr[role='row'] td:first");
+                    this.current(cell);
+                },
+                columns: [
+                    { field: "bagBarcode", title: "Barcode No.", width: "22%" },
+                    { field: "styleId", title: "l1 No", width: "10%", hidden: true },
+                    { field: "styleNo", title: "Style", width: "10%" },
+                    { field: "scheduleId", title: "l2", width: "10%", hidden: true },
+                    { field: "scheduleNo", title: "Shedule No", width: "10%" },
+                    { field: "colorId", title: "l4 No", width: "10%", hidden: true },
+                    { field: "colorNo", title: "Color", width: "22%" },
+                    { field: "txnMode", title: "Txn Mode", width: "10%", hidden: true },
+                    { field: "qty01", title: "Good", width: "7%" },
+                    { field: "qty02", title: "Scrap", width: "7%" },
+                    { field: "qty03", title: "Rework", width: "7%" }
+                ]
+            }).data("kendoGrid");
+
+            var arrows = [38, 40];
+            groupTagSearchGrid.table.on("keydown", function (e) {
+                if (arrows.indexOf(e.keyCode) >= 0) {
+                    setTimeout(function () {
+                        groupTagSearchGrid.select($("#rowSelection_active_cell").closest("tr"));
+                    }, 10);
+                }
+            });
+
+            groupBarcodeSearchWindow.one("activate", function () {
+                groupTagSearchGrid.resize();
+            });
+            groupBarcodeSearchWindow.open().center();
+
+            $("#groupTagSearchWindowGroupTagTxt").keydown(function (e) {
+                if (e.keyCode == 13) {
+                    if ($("#groupTagSearchWindowGroupTagTxt").val().length > 0) {
+                        groupTagSearchGrid.dataSource.read({ groupTagNo: $("#groupTagSearchWindowGroupTagTxt").val() });
+                    } else {
+                        groupTagSearchGrid.dataSource.data([]);
+                    }
+                    groupTagSearchGrid.table.focus();
+                }
+            });
+
+        });
+
+        $("#gatePassSearchBtn").click(function () {
+            if ($('#barcodeGroupTagTxt').val() == "") {
+                msgBox.show('කරුණාකර කණ්ඩායම් ටැගය තෝරන්න.', 'Please select group tag.', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                    $('#groupTagSearchBtn').focus();
+                });
+                return;
+            }
+            selectedGatePass = null;
+            gatePassSearchWindow = $("#gatePassSearchWindow").kendoWindow({
+                width: "80%",
+                height: "60%",
+                title: "Gate Pass Search",
+                visible: false,
+                actions: [
+                    "Close"
+                ],
+                modal: true,
+                resizable: false,
+                draggable: false,
+                pinned: true,
+                activate: function () {
+                    $("#gatePassSearchWindowGatePassTxt").select();
+                },
+                open: function (e) { $("html, body").css("overflow", "hidden"); },
+                close: onGatePassSearchClose
+            }).data("kendoWindow");
+
+            gatePassSearchWindow.wrapper.find('.k-window-titlebar').css({
+                'background-color': 'black',
+                'font-size': '18px',
+                'color': 'white'
+            });
+
+            gatePassSearchGrid = $("#gatePassSearchGrid").kendoGrid({
+                autoBind: true,
+                dataSource: {
+                    transport: {
+                        read: '@ViewBag.APIURL/Lookup/GetGatePassDetailsByGroupTag?groupTagNo=' + selectedGroupTagNo,
+                    },
+                    schema: {
+                        model: {
+                            fields: {
+                                controlId: { type: "string" },
+                                qty01: { type: "string" }
+                            }
+                        }
+                    },
+                    type: "json"
+                },
+                height: "75%",
+                width: "90%",
+                scrollable: true,
+                change: onChangeGatePass,
+                navigatable: true,
+                selectable: "multiple cell",
+                dataBound: function (e) {
+                    var cell = this.tbody.find("tr[role='row'] td:first");
+                    this.current(cell);
+                },
+                columns: [
+                    { field: "controlId", title: "Gate Pass No", width: "30%" },
+                    { field: "qty01", title: "Quantity", width: "70%" }
+                ]
+            }).data("kendoGrid");
+
+            var arrows = [38, 40];
+            gatePassSearchGrid.table.on("keydown", function (e) {
+                if (arrows.indexOf(e.keyCode) >= 0) {
+                    setTimeout(function () {
+                        gatePassSearchGrid.select($("#rowSelection_active_cell").closest("tr"));
+                    }, 10);
+                }
+            });
+
+            gatePassSearchWindow.one("activate", function () {
+                gatePassSearchGrid.resize();
+            });
+            gatePassSearchWindow.open().center();
+            $("#gatePassSearchWindowGatePassTxt").keydown(function (e) {
+                if (e.keyCode == 13) {
+                    gatePassSearchGrid.table.focus();
+                }
+            });
+        });
+
+
+        //Styles are searched in Style Search window on the fly
+        $("#groupTagSearchWindowGroupTagTxt").keyup(function () {
+            $('#barcodeBcodeTxt').val("");
+            groupTagSearchGrid.dataSource.data([]);
+        });
+
+        $("#groupTagTextSearchBtn").click(function () {
+            $('#barcodeBcodeTxt').val("");
+            if ($("#groupTagSearchWindowGroupTagTxt").val().length > 0) {
+                groupTagSearchGrid.dataSource.read({ groupTagNo: $("#groupTagSearchWindowGroupTagTxt").val() });
+            } else {
+                groupTagSearchGrid.dataSource.data([]);
+            }
+        });
+
+        //Colors are searched in Color Search window on the fly
+        $("#gatePassSearchWindowGatePassTxt").keyup(function () {
+
+            $('#barcodeBcodeTxt').val("");
+            gatePassSearchGrid.dataSource.read({ gatePassNo: $("#gatePassSearchWindowGatePassTxt").val() });
+        });
+
+        $("#barcodeBcodeTxt").keydown(function (e) {
+            if (e.keyCode == 13) {
+
+                if ($('#barcodeBcodeTxt').val() != "") {
+                    checkBarcodeIsValid();
+                    return;
+                }
+            }
+        });
+
+        $('#trxModeGoodBtn').click(function () {
+            selectTrxModeGood();
+            if (selectedScanOption == ScanOption.After && isValidBarcode) {
+                updateTable();
+                return;
+            }
+            if (selectedScanOption == ScanOption.Continue) {
+                $("#barcodeBcodeTxt").removeAttr("disabled");
+                $("#barcodeBcodeTxt").focus();
+                return;
+            }
+        });
+    }
+
+    //Counter Window Controllers: START
+    function DisableInputs() {
+        $("#BAGBtnClear").attr('disabled', 'disabled');
+        $("#BAGBtnReset").attr('disabled', 'disabled');
+
+        $("#POBtnClear").attr('disabled', 'disabled');
+        $("#POBtnReset").attr('disabled', 'disabled');
+    }
+
+    function EnableInputs() {
+        $("#BAGBtnClear").removeAttr('disabled');
+        $("#BAGBtnReset").removeAttr('disabled');
+
+        $("#POBtnClear").removeAttr('disabled');
+        $("#POBtnReset").removeAttr('disabled');
+    }
+    //Counter Window Controllers: END
+
+    function populatePermissionList() { //NE
+
+        userPermissionList = JSON.parse(sessionStorage.getItem("UserPermissionList"));
+        //console.log('Called populatePermissionList method. List is..');
+        //console.log(userPermissionList);
+        var uniqueUserPermissionList = [];
+        for (i = 0; i < userPermissionList.length; i++) {
+            if (uniqueUserPermissionList.indexOf(userPermissionList[i].funcName) === -1) {
+                uniqueUserPermissionList.push(userPermissionList[i].funcName);
+                $('#userpermissionlist').append('<div class="row"><label class="control-datalabel">' + userPermissionList[i].funcName + '</label></div>');
+            }
+        }
+    }
+
+    function getSessionInfo() { //NE
+        isValidClient = sessionStorage.getItem("IsValidClient");
+        clientconfig = JSON.parse(sessionStorage.getItem("Clientconfig"));
+        userPermissionList = JSON.parse(sessionStorage.getItem("UserPermissionList"));
+        clientIP = sessionStorage.getItem("ClientIP");
+        txUser = JSON.parse(sessionStorage.getItem("TxUser"));
+        //console.log('Called getSessionInfo method. IsValidClient = ' + isValidClient);
+    }
+
+    function resetControls() {
+        $('#tagQty').html('0');
+        $('#scannedQty').html('0');
+        $('#duplicateScanQty').html('0');
+        $('#status').removeClass('blinktext');
+        $('#status').removeClass('control-datalabel-scannedstatus-fail');
+        $('#status').removeClass('control-datalabel-scannedstatus-pass');
+        $("#errorBarcodeBreakdowbDetails").data('kendoGrid').dataSource.data([]);
+        $("#barcodeBreakdowbDetails").data('kendoGrid').dataSource.data([]);
+    }
+
+    function setPageControlsStartupStatus() { //NE
+        $('#trxModeGoodBtn').hide();
+        $('#scannedCountDataLabel').html(scannedCount);
+        $("#barcodeBcodeTxt").attr("disabled", "disabled");
+        $('#scannedStatusDataLabel').html("");
+        $('#lastBarcodeDataLabel').html("");
+        $('#lastAction').html("");
+        $('#lastTxMode').html("");
+
+        //Added during "After"
+        $("#barcodeGroupTagTxt").val("");
+        $("#groupTagDataLabel").html("");
+        $('#txnModeDataLabel').html('');
+        $("#barcodeGatePassTextTxt").val("");
+        $("#gatePassDataLabel").html("");
+
+        selectedGroupTag = null;
+        selectedGatePass = null;
+        selectedGroupTagNo = null;
+        selectedGroupTagDesc = null;
+        selectedScanCounterId = null;
+    }
+
+    function onChangeGroupTag(arg) { //NS
+        var row = $(this.select()).closest("tr");
+        var dataItem = groupTagSearchGrid.dataItem(row);
+
+        if (dataItem == null)
+            return;
+        selectedGroupTag = dataItem;
+        selectedGroupTagNo = dataItem.bagBarcode;
+        selectedGroupTagDesc = dataItem.colorNo;
+
+        // console.log('User selected style..');
+        //console.log(selectedGroupTag);
+
+        if ($("#groupTagSearchWindowGroupTagTxt").val().length > 0) {
+            $("#barcodeGroupTagTxt").val(selectedGroupTagNo);
+            $('#groupTagDataLabel').html(selectedGroupTagDesc);
+            $('#txnModeDataLabel').html(selectedGroupTag.txnMode);
+            //console.log(clientconfig.wfdepinstId);
+
+            refresValuesonChangeStyle();
+        }
+        else {
+            $("#barcodeGroupTagTxt").val("");
+            $("#groupTagSearchWindowGroupTagTxt").val("");
+            $('#groupTagDataLabel').val("");
+            $('#txnModeDataLabel').html('');
+            $("#barcodeGatePassTextTxt").val("");
+            selectedGroupTag = null;
+            selectedGatePass = null;
+
+        }
+        groupTagSearchGrid.dataSource.data([]);
+        groupBarcodeSearchWindow.close();
+    }
+
+    function onGroupTagSearchClose() { //NS
+        if (selectedGroupTag != null) {
+            $("#barcodeGroupTagTxt").val(selectedGroupTagNo);
+            $('#groupTagDataLabel').html(selectedGroupTagDesc);
+            $('#txnModeDataLabel').html(selectedGroupTag.txnMode);
+            resetControls();
+            $('#tagQty').html(selectedGroupTag.qty01);
+            loadGaramentsInGroupTag(selectedGroupTagNo, selectedGroupTag.txnMode);
+        }
+        else {
+            $("#barcodeGroupTagTxt").val("");
+            $('#groupTagDataLabel').html("");
+            $('#txnModeDataLabel').html('');
+        }
+        $("#groupTagSearchWindowGroupTagTxt").val("");
+        groupTagSearchGrid.dataSource.data([]);
+    }
+
+    function loadGaramentsInGroupTag(groupTag, txnMode) { //NE
+        refreshmsgBoxHeaderStyle();
+        //console.log("pocounterNumber load po counter: ", clientconfig.pocounterNumber);
+        
+        $("#barcodeTableView").hide();
+        $("#errorbarcodeTableView").hide();
+        $("#barcodeBreakdowbDetails").data('kendoGrid').dataSource.data([]);
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetGarametsBarcodeByGroupTag?barcode=' + groupTag + '&txnmode=' + parseInt(txnMode),
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                //Modifed by NimanthaH
+                runningPOCounters = [];
+                if (response != null) {
+                    if (response.length != 0) {
+                        $("#barcodeTableView").show();
+                        runningPOCounters = response;
+                        var result = "";
+                        $("#counerlabelDetails").html('');
+                        $('#status').html('Loaded');
+                        $('#status').removeClass('blinktext');
+                        $('#status').removeClass('control-datalabel-scannedstatus-fail');
+                        $('#status').addClass('control-datalabel-scannedstatus-pass');
+                        var GridData = [];
+                        $.each(response, function (id, counter) {
+                            var row = {
+                                status: 0,
+                                barcode: counter.barcode,
+                                styleId: counter.styleId,
+                                styleNo: counter.styleNo,
+                                scheduleId: counter.scheduleId,
+                                scheduleNo: counter.scheduleNo,
+                                PONo: counter.poNo,
+                                zFeature: counter.zfeature,
+                                colorId: counter.colorId,
+                                colorNo: counter.colorDesc,
+                                sizeId: counter.sizeId,
+                                sizeDesc: counter.sizeDesc,
+                                moNo: counter.l5mono,
+                                bagBarcode: counter.bagBarCodeNo,
+                                travelBarcode: counter.refBagBarCodeNo,
+                                qty01: counter.enteredQtyGd,
+                                qty02: counter.enteredQtyScrap,
+                                qty03: counter.enteredQtyRw,
+                            }
+                            GridData.push(row);
+                        });
+                        $("#barcodeBreakdowbDetails").data('kendoGrid').dataSource.data(GridData);
+                        $("#barcodeBcodeTxt").val('');
+                        EnableControllers();
+                    } else {
+                        $("#barcodeTableView").show();
+                        $("#barcodeBcodeTxt").val('');
+                        $("#counerlabelDetails").html('No Records Found');
+                        $('#status').html('Failed');
+                        $('#status').addClass('blinktext');
+                        $('#status').addClass('control-datalabel-scannedstatus-fail');
+                        $('#status').removeClass('control-datalabel-scannedstatus-pass');
+                        EnableControllers();
+                    }
+                } else {
+                    $("#barcodeTableView").show();
+                    $("#barcodeBcodeTxt").val('');
+                    $("#counerlabelDetails").html('No Records Found');
+                    $('#status').html('Failed');
+                    $('#status').addClass('blinktext');
+                    $('#status').addClass('control-datalabel-scannedstatus-fail');
+                    $('#status').removeClass('control-datalabel-scannedstatus-pass');
+                    EnableControllers();
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                //formatErrorMessage(jqXHR, errorThrown, "Barcode");
+                msgBox.show('දෝෂයකි. කරුණාකර නැවත උත්සාහ කරන්න..' , 'Error. Please try again.', 'Warning', 'BU05', 'Warning', null);
+                $('#status').html('Failed');
+                $('#status').addClass('blinktext');
+                $('#status').addClass('control-datalabel-scannedstatus-fail');
+                $('#status').removeClass('control-datalabel-scannedstatus-pass');
+            }
+
+        });
+    }
+
+    function onChangeGatePass(arg) { //NS
+        var row = $(this.select()).closest("tr");
+        var dataItem = gatePassSearchGrid.dataItem(row);
+        selectedGatePass = dataItem;
+        gatePassSearchGrid.dataSource.data([]);
+        gatePassSearchWindow.close();
+
+        $("#barcodeBcodeTxt").val("");
+        $("#barcodeBcodeTxt").removeAttr("disabled");
+        scannedBarcode = null;
+        isValidBarcode = false;//to block function key behaviour
+
+        $('#scheduleDataLabel').html("");
+        $('#poDataLabel').html("");
+        $('#dataLabelzFeature').html("");
+        $('#sizeDataLabel').html("");
+        $('#bcColorDataLabel').html("");
+        $('#ShadeLotPatt').html("");
+
+        $("#barcodeBcodeTxt").select();
+        $("#barcodeBcodeTxt").focus();
+    }
+
+    function onGatePassSearchClose() { //NS
+        if (selectedGatePass != null) {
+            $('#barcodeGatePassTextTxt').val(selectedGatePass.controlId);
+            $('#gatePassDataLabel').html(selectedGatePass.qty01);
+        }
+        else {
+            $('#barcodeGatePassTextTxt').val("");
+            $('#gatePassDataLabel').html("");
+
+            $("#barcodeBcodeTxt").val("");
+            $("#barcodeBcodeTxt").removeAttr("disabled");
+            scannedBarcode = null;
+            isValidBarcode = false;//to block function key behaviour
+
+            $('#scheduleDataLabel').html("");
+            $('#ShadeLotPatt').html("");
+            $('#poDataLabel').html("");
+            $('#dataLabelzFeature').html("");
+            $('#sizeDataLabel').html("");
+            $('#bcColorDataLabel').html("");
+        }
+
+        $("#gatePassSearchWindowGatePassTxt").val("");
+        gatePassSearchGrid.dataSource.data([]);
+        $("#barcodeBcodeTxt").select();
+        $("#barcodeBcodeTxt").focus();
+    }
+
+    function GetClientByWF(arg) {
+        refreshmsgBoxHeaderStyle();
+        //if (wfid != null){ 
+        $.ajax({
+            url: '@ViewBag.APIURL/Security/GetClientByWfIdandIP?clientIP=' + clientconfig.clientIP + '&wfid=' + wfid + '&clientId=' + clientconfig.clientId,
+            type: 'GET',
+            dataType: 'json',
+            async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                if (response != null) {
+                    var temwfdepinstId = clientconfig.wfdepinstId;
+
+                    clientconfig = {
+                        "clientId": response.clientId,
+                        "dataCaptureMode": response.dataCaptureMode,
+                        "facName": response.facName,
+                        "loginMode": response.loginMode,
+                        "opCode1": response.opCode1,
+                        "opCode2": response.opCode2,
+                        "operationName": response.operationName,
+                        "recStatus": response.recStatus,
+                        "selectMode": response.selectMode,
+                        "teamId": response.teamId,
+                        "teamName": response.teamName,
+                        "facName": response.facName,
+                        "wfdepinstId": response.wfdepinstId,
+                        "wfId": wfid,
+                        "clientIP": clientconfig.clientIP
+                    };
+
+
+                    if (clientconfig.teamId == 0 || clientconfig.teamId == null) {
+                        setMainOperationVisibility();
+                    }
+
+                    if (temwfdepinstId != clientconfig.wfdepinstId) {
+                        refresValuesonChangeStyle();
+                    }
+
+                    setClientConfigInfo();
+                }
+                else {
+
+
+                    msgBox.show('කාර්ය ප්‍රවාහයට අවසර නැත. කරුණාකර තොරතුරු තාක්ෂණ නිලධාරියෙකු අමතන්න.',
+                        'Client is not configured for this Workflow..WFID = ' + wfid + ' Please contact a IT helpdesk officer',
+                        'අවවාදයයි / Warning',
+                        'BS22',
+                        'Warning',
+                        null);
+                    $("#barcodeBcodeTxt").val("");
+                    $("#barcodeBcodeTxt").focus();
+                    sacanComplete = false;
+                    errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Client is not configured for this Workflow..WFID'
+                    return;
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                //formatErrorMessage(jqXHR, errorThrown, "Barcode");
+                msgBox.show('දෝෂයකි. කරුණාකර නැවත උත්සාහ කරන්න..' , 'Error. Please try again.', 'Warning', 'BU05', 'Warning', null);
+            }
+        });
+        //}   
+    }
+
+    function refresValuesonChangeStyle(arg) { //NE
+        refreshmsgBoxHeaderStyle();
+        if (selectedGroupTag != null) {
+            $("#barcodeBcodeTxt").val("");
+            $("#barcodeBcodeTxt").removeAttr("disabled");
+            scannedBarcode = null;
+            selectedGatePass = null;
+            isValidBarcode = false;//to block function key behaviour
+            $("#barcodeBcodeTxt").select();
+            $("#barcodeBcodeTxt").focus();
+        } else {
+            $("#barcodeBcodeTxt").val("");
+        }
+    }
+
+    function refreshmsgBoxHeaderStyle() {
+        $('#msgWindow').removeClass("msgWindowWarning");
+        $('#msgWindow').removeClass("msgWindowConfirm");
+    }
+
+    function getWFDEPInstId(arg) {
+        $.ajax({
+            //url: '@ViewBag.APIURL/Security/GetWfDEPInstByClientWF?ClientId=' +  clientconfig.clientId + '&WFId=' + clientconfig.wfId,
+            url: '@ViewBag.APIURL/Security/GetWfDEPInstByTeamOppWF?TeamId=' + TeamId + '&OppCode=' + clientconfig.OppCode + '&WFId=' + clientconfig.wfId,
+
+            type: 'GET',
+            dataType: 'json',
+            async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                if (response != null) {
+                    WFDEPInstId = response.wfdepinstId;
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                //formatErrorMessage(jqXHR, errorThrown, "Barcode");
+                msgBox.show('දෝෂයකි. කරුණාකර නැවත උත්සාහ කරන්න..' , 'Error. Please try again.', 'Warning', 'BU05', 'Warning', null);
+            }
+        });
+    }
+
+    function beep(vol, freq, duration) {
+        v = a.createOscillator()
+        u = a.createGain()
+        v.connect(u)
+        v.frequency.value = freq
+        v.type = "square"
+        u.connect(a.destination)
+        u.gain.value = vol * 0.01
+        v.start(a.currentTime)
+        v.stop(a.currentTime + duration * 0.001)
+    }
+
+    function beeponce() {
+        var snd = new Audio("data:audio/wav;base64,//uQRAAAAWMSLwUIYAAsYkXgoQwAEaYLWfkWgAI0wWs/ItAAAGDgYtAgAyN+QWaAAihwMWm4G8QQRDiMcCBcH3Cc+CDv/7xA4Tvh9Rz/y8QADBwMWgQAZG/ILNAARQ4GLTcDeIIIhxGOBAuD7hOfBB3/94gcJ3w+o5/5eIAIAAAVwWgQAVQ2ORaIQwEMAJiDg95G4nQL7mQVWI6GwRcfsZAcsKkJvxgxEjzFUgfHoSQ9Qq7KNwqHwuB13MA4a1q/DmBrHgPcmjiGoh//EwC5nGPEmS4RcfkVKOhJf+WOgoxJclFz3kgn//dBA+ya1GhurNn8zb//9NNutNuhz31f////9vt///z+IdAEAAAK4LQIAKobHItEIYCGAExBwe8jcToF9zIKrEdDYIuP2MgOWFSE34wYiR5iqQPj0JIeoVdlG4VD4XA67mAcNa1fhzA1jwHuTRxDUQ//iYBczjHiTJcIuPyKlHQkv/LHQUYkuSi57yQT//uggfZNajQ3Vmz+Zt//+mm3Wm3Q576v////+32///5/EOgAAADVghQAAAAA//uQZAUAB1WI0PZugAAAAAoQwAAAEk3nRd2qAAAAACiDgAAAAAAABCqEEQRLCgwpBGMlJkIz8jKhGvj4k6jzRnqasNKIeoh5gI7BJaC1A1AoNBjJgbyApVS4IDlZgDU5WUAxEKDNmmALHzZp0Fkz1FMTmGFl1FMEyodIavcCAUHDWrKAIA4aa2oCgILEBupZgHvAhEBcZ6joQBxS76AgccrFlczBvKLC0QI2cBoCFvfTDAo7eoOQInqDPBtvrDEZBNYN5xwNwxQRfw8ZQ5wQVLvO8OYU+mHvFLlDh05Mdg7BT6YrRPpCBznMB2r//xKJjyyOh+cImr2/4doscwD6neZjuZR4AgAABYAAAABy1xcdQtxYBYYZdifkUDgzzXaXn98Z0oi9ILU5mBjFANmRwlVJ3/6jYDAmxaiDG3/6xjQQCCKkRb/6kg/wW+kSJ5//rLobkLSiKmqP/0ikJuDaSaSf/6JiLYLEYnW/+kXg1WRVJL/9EmQ1YZIsv/6Qzwy5qk7/+tEU0nkls3/zIUMPKNX/6yZLf+kFgAfgGyLFAUwY//uQZAUABcd5UiNPVXAAAApAAAAAE0VZQKw9ISAAACgAAAAAVQIygIElVrFkBS+Jhi+EAuu+lKAkYUEIsmEAEoMeDmCETMvfSHTGkF5RWH7kz/ESHWPAq/kcCRhqBtMdokPdM7vil7RG98A2sc7zO6ZvTdM7pmOUAZTnJW+NXxqmd41dqJ6mLTXxrPpnV8avaIf5SvL7pndPvPpndJR9Kuu8fePvuiuhorgWjp7Mf/PRjxcFCPDkW31srioCExivv9lcwKEaHsf/7ow2Fl1T/9RkXgEhYElAoCLFtMArxwivDJJ+bR1HTKJdlEoTELCIqgEwVGSQ+hIm0NbK8WXcTEI0UPoa2NbG4y2K00JEWbZavJXkYaqo9CRHS55FcZTjKEk3NKoCYUnSQ0rWxrZbFKbKIhOKPZe1cJKzZSaQrIyULHDZmV5K4xySsDRKWOruanGtjLJXFEmwaIbDLX0hIPBUQPVFVkQkDoUNfSoDgQGKPekoxeGzA4DUvnn4bxzcZrtJyipKfPNy5w+9lnXwgqsiyHNeSVpemw4bWb9psYeq//uQZBoABQt4yMVxYAIAAAkQoAAAHvYpL5m6AAgAACXDAAAAD59jblTirQe9upFsmZbpMudy7Lz1X1DYsxOOSWpfPqNX2WqktK0DMvuGwlbNj44TleLPQ+Gsfb+GOWOKJoIrWb3cIMeeON6lz2umTqMXV8Mj30yWPpjoSa9ujK8SyeJP5y5mOW1D6hvLepeveEAEDo0mgCRClOEgANv3B9a6fikgUSu/DmAMATrGx7nng5p5iimPNZsfQLYB2sDLIkzRKZOHGAaUyDcpFBSLG9MCQALgAIgQs2YunOszLSAyQYPVC2YdGGeHD2dTdJk1pAHGAWDjnkcLKFymS3RQZTInzySoBwMG0QueC3gMsCEYxUqlrcxK6k1LQQcsmyYeQPdC2YfuGPASCBkcVMQQqpVJshui1tkXQJQV0OXGAZMXSOEEBRirXbVRQW7ugq7IM7rPWSZyDlM3IuNEkxzCOJ0ny2ThNkyRai1b6ev//3dzNGzNb//4uAvHT5sURcZCFcuKLhOFs8mLAAEAt4UWAAIABAAAAAB4qbHo0tIjVkUU//uQZAwABfSFz3ZqQAAAAAngwAAAE1HjMp2qAAAAACZDgAAAD5UkTE1UgZEUExqYynN1qZvqIOREEFmBcJQkwdxiFtw0qEOkGYfRDifBui9MQg4QAHAqWtAWHoCxu1Yf4VfWLPIM2mHDFsbQEVGwyqQoQcwnfHeIkNt9YnkiaS1oizycqJrx4KOQjahZxWbcZgztj2c49nKmkId44S71j0c8eV9yDK6uPRzx5X18eDvjvQ6yKo9ZSS6l//8elePK/Lf//IInrOF/FvDoADYAGBMGb7FtErm5MXMlmPAJQVgWta7Zx2go+8xJ0UiCb8LHHdftWyLJE0QIAIsI+UbXu67dZMjmgDGCGl1H+vpF4NSDckSIkk7Vd+sxEhBQMRU8j/12UIRhzSaUdQ+rQU5kGeFxm+hb1oh6pWWmv3uvmReDl0UnvtapVaIzo1jZbf/pD6ElLqSX+rUmOQNpJFa/r+sa4e/pBlAABoAAAAA3CUgShLdGIxsY7AUABPRrgCABdDuQ5GC7DqPQCgbbJUAoRSUj+NIEig0YfyWUho1VBBBA//uQZB4ABZx5zfMakeAAAAmwAAAAF5F3P0w9GtAAACfAAAAAwLhMDmAYWMgVEG1U0FIGCBgXBXAtfMH10000EEEEEECUBYln03TTTdNBDZopopYvrTTdNa325mImNg3TTPV9q3pmY0xoO6bv3r00y+IDGid/9aaaZTGMuj9mpu9Mpio1dXrr5HERTZSmqU36A3CumzN/9Robv/Xx4v9ijkSRSNLQhAWumap82WRSBUqXStV/YcS+XVLnSS+WLDroqArFkMEsAS+eWmrUzrO0oEmE40RlMZ5+ODIkAyKAGUwZ3mVKmcamcJnMW26MRPgUw6j+LkhyHGVGYjSUUKNpuJUQoOIAyDvEyG8S5yfK6dhZc0Tx1KI/gviKL6qvvFs1+bWtaz58uUNnryq6kt5RzOCkPWlVqVX2a/EEBUdU1KrXLf40GoiiFXK///qpoiDXrOgqDR38JB0bw7SoL+ZB9o1RCkQjQ2CBYZKd/+VJxZRRZlqSkKiws0WFxUyCwsKiMy7hUVFhIaCrNQsKkTIsLivwKKigsj8XYlwt/WKi2N4d//uQRCSAAjURNIHpMZBGYiaQPSYyAAABLAAAAAAAACWAAAAApUF/Mg+0aohSIRobBAsMlO//Kk4soosy1JSFRYWaLC4qZBYWFRGZdwqKiwkNBVmoWFSJkWFxX4FFRQWR+LsS4W/rFRb/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////VEFHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAU291bmRib3kuZGUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMjAwNGh0dHA6Ly93d3cuc291bmRib3kuZGUAAAAAAAAAACU=");
+        snd.play();
+    }
+
+    //Disable Enabale Barcode Scan Textbox
+    function DisableControllers() {
+        $("#barcodeBcodeTxt").attr('disabled', 'disabled');
+    }
+
+    function EnableControllers() {
+        $("#barcodeBcodeTxt").removeAttr('disabled');
+        $("#barcodeBcodeTxt").select();
+        $("#barcodeBcodeTxt").focus();
+    }
+
+    //Help functions
+    function formatDate(date) {
+        return (new Date(Date.parse(date)).toLocaleDateString("en-US", { month: '2-digit', day: '2-digit', year: 'numeric' }));
+        //return (date == null || date == undefined || date == "") ? date : date.replace(/T/g, " ")
+    }
+
+</script>
+
+<!-- Main Window: START -->
+<div class="form-group">
+    <div class="row">
+        <div class="col-xs-6"
+            style="width: 47%; /*border-radius: 15px; border: #ffffff63 solid 2px; top: 10px; box-shadow: 6px 7px 5px #00000075;*/">
+            <div class="row">
+                <label class="col-xs-2 control-label control-label-main" style="width: 22%;">Group Barcode :</label>
+                <div class="col-xs-4">
+                    <input type="text" id="barcodeGroupTagTxt" class="form-control" style="height: 44px; width: 280px;"
+                        placeholder="Select Group Tag" readonly>
+                </div>
+                <div class="col-xs-1">
+                    <button type="button" id="groupTagSearchBtn" class="btn btn-primary searchButton"
+                        style="margin-left: 15px; margin-top: 19px;" title="Group Tag Search">
+                        <span><i class="fas fa-search"></i></span>
+                    </button>
+                </div>
+                <div class="col-xs-4">
+                    <label class="control-datalabel control-datalabel-search" id="groupTagDataLabel"></label>
+                    <label id="txnModeDataLabel" hidden="hidden"></label>
+                </div>
+            </div>
+            <div class="row">
+                <label class="col-xs-2 control-label control-label-main" style="width: 22%;">Gate Pass Number :</label>
+                <div class="col-xs-4">
+                    <input type="text" id="barcodeGatePassTextTxt" class="form-control" placeholder="Select Gate Pass"
+                        style="height: 44px; width: 280px;" readonly>
+                </div>
+                <div class="col-xs-1">
+                    <button type="button" id="gatePassSearchBtn" class="btn btn-primary searchButton"
+                        style="margin-left: 15px; margin-top: 19px;" title="Gate Pass Search">
+                        <span><i class="fas fa-search"></i></span>
+                    </button>
+                </div>
+                <div class="col-xs-4">
+                    <label class="control-datalabel control-datalabel-search" id="gatePassDataLabel"></label>
+                </div>
+            </div>
+            <div class="row">
+                <label class="col-xs-2 control-label control-label-main" style="width: 22%;">Barcode :</label>
+                <div class="col-xs-7">
+                    <input type="textarea" id="barcodeBcodeTxt" class="form-control textbox-barcode" maxlength="12"
+                        placeholder="Scan Barcode">
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-xs-2"></div>
+                <div class="col-xs-3"></div>
+                <div class="col-xs-4"></div>
+            </div>
+        </div>
+
+        <div class="col-xs-6" style="width: 53%;">
+            <div class="bc_rightcontent">
+                <div class="row">
+                    <div class="col-xs-12">
+                        <div class="row roundCornerGroupBox" style="margin-right: 3px;">
+                            <div class="row" style="margin-top: 8px; margin-bottom: 8px;">
+                                <div class="col-xs-6">
+                                    <label class="control-scan-status-val" style="font-size: 55px !important; padding-left: 0px; margin-left: 35px;" id="status"></label>
+                                </div>
+                                <div class="col-xs-6">
+                                    <div class="row">
+                                        <div class="col-xs-12">
+                                            <label class="control-scan-status" style="padding-left: 0px;">Barcode:</label>
+                                            <label class="control-scan-status-val" style="padding-left: 0px; margin-left: 50px;"id="lastBarcodeDataLabel"></label>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-xs-12">
+                                            <label class="control-scan-status" style="padding-left: 0px;">Scanned Qty</label>
+                                            <label class="qty-label" style="background-color: #43a047; margin-left: 20px;" id="tagQty" title="Group tag TOTAL Quantity"></label>
+                                            <label class="qty-label" style="background-color: #FFC107;" id="scannedQty" title="Group tag SCANNED Quantity"></label>
+                                            <label class="qty-label" style="background-color: #F44336;" id="duplicateScanQty" title="Group tag DUPLICATE SCANNED Quantity"></label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row" style="padding-right: 15px;">
+                    <div class="col-xs-12">
+                        <div class="row  roundCornerGroupBox" style="height:24vh;">
+                            <div class="col-xs-7" style="padding-left: 0px;">
+                                <div class="row" style="height:7vh; overflow: auto;">
+                                    <label class="control-label col-xs-3">PO :</label>
+                                    <label class="bcInfoDataLabel col-xs-8" id="poDataLabel"></label>
+                                </div>
+                                <div class="row" style="height:7vh; overflow: auto;">
+                                    <label class="control-label col-xs-3">Z Fture. :</label>
+                                    <label class="bcInfoDataLabel col-xs-8" id="dataLabelzFeature"></label>
+                                </div>
+                                <div class="row" style="height:7vh; overflow: auto;">
+                                    <label class="control-label col-xs-3">Color :</label>
+                                    <label class="bcInfoDataLabel col-xs-8" id="bcColorDataLabel"></label>
+                                </div>
+                            </div>
+                            <div class="col-xs-5" style="padding-left: 0px;">
+                                <div class="row" style="height:7vh; overflow: auto;">
+                                    <label class="control-label col-xs-4" style="padding-left: 0px;">Size :</label>
+                                    <label class="bcInfoDataLabel col-xs-3" style="width:140px;"
+                                        id="sizeDataLabel"></label>
+                                </div>
+                                <div class="row" style="height:7vh; overflow: auto;">
+                                    <label class="control-label col-xs-4" style="padding-left: 0px;">Schedule :</label>
+                                    <label class="bcInfoDataLabel col-xs-3" id="scheduleDataLabel"></label>
+                                </div>
+                                <div class="row" style="height:7vh; overflow: auto;">
+                                    <label class="control-label col-xs-4" style="padding-left: 0px; width:155px;">Shade
+                                        Lot / Patt :</label>
+                                    <label class="bcInfoDataLabel col-xs-3" id="ShadeLotPatt"></label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row" class="m-2" style="margin-right: 15px;" id="barcodeTableView">
+        <div id="opLables" class="roundCornerGroupBox_Scrolabale" hidden="hidden"
+            style="padding-bottom: 12px; display: initial;">
+            <div class="row col-md-12 roundCornerGroupBox_PO_Counter"
+                style="width: 99.7% !important; overflow-y: hidden; overflow-x: auto;">
+                <div class="scrolable-field" id="barcodeBreakdowbDetails" style="margin-top: 15px; margin-bottom: 15px; overflow: auto; height: 420px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row" class="m-2" style="margin-right: 15px;" id="errorbarcodeTableView">
+        <div id="erroropLables" class="roundCornerGroupBox_Scrolabale" hidden="hidden"
+            style="padding-bottom: 12px; display: initial;">
+            <div class="row col-md-12 roundCornerGroupBox_PO_Counter"
+                style="width: 99.7% !important; overflow-y: hidden; overflow-x: auto;">
+                <div class="scrolable-field" id="errorBarcodeBreakdowbDetails" style="margin-top: 15px; margin-bottom: 15px; overflow: auto; height: 420px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row" class="m-2"></div>
+</div>
+<!-- MAIN WINDOW: END-->
+
+<!-- STYLE SEARCH WINDOW: START-->
+<div id="groupBarcodeSearchWindow" class="styleSearchWindow" hidden="hidden">
+    <div class="row">
+        <div class="col-xs-5">
+            <input type="text" class="form-control" placeholder="Enter Group Tag Number"
+                id="groupTagSearchWindowGroupTagTxt" style="width:90%; margin-left: -20px;">
+        </div>
+        <div class="col-xs-3">
+            <button type="button" id="groupTagTextSearchBtn" class="btn btn-primary searchButton"
+                style="height: 33px !important;" title="Group Tag Search"><span><i
+                        class="fas fa-search"></i></span></button>
+        </div>
+    </div>
+    <br>
+    <div id="groupTagSearchGrid">
+    </div>
+    <!-- STYLE SEARCH WINDOW: END-->
+
+    <!-- COLOR SEARCH WINDOW: START-->
+    <div id="gatePassSearchWindow" class="colorSearchWindow" hidden="hidden">
+        <input type="text" class="form-control" placeholder="Enter Gate Pass No" id="gatePassSearchWindowGatePassTxt"
+            style="width:25%">
+        <br>
+        <div id="gatePassSearchGrid">
+        </div>
+    </div>
+    <!-- COLOR SEARCH WINDOW: END-->
+
+    <!--Page Styles: START-->
+    <Style>
+        /* Scroll Bar */
+        /* width */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 15px;
+            margin-bottom: 7px;
+        }
+
+        /* Track */
+        ::-webkit-scrollbar-track {
+            background: #49505700;
+        }
+
+        /* Handle */
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            border-bottom-right-radius: 8px;
+            border-bottom-left-radius: 8px;
+        }
+
+        /* Handle on hover */
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .Loaded {
+            background-color: #fdd;
+        }
+
+        .Scanned {
+            background-color: #fda;
+        }
+
+        .ok {
+            background-color: #ced;
+        }
+    </Style>
+    <!--Page Styles: END-->

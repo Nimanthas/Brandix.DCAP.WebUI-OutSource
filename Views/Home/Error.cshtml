@@ -1,0 +1,28 @@
+﻿@model Exception
+
+@{
+    ViewBag.Title = "Oops!";
+}
+
+<script>
+    $(document).ready(function () {
+        $('#sitebody').removeClass('body-login');
+        $("#errorSin").html(sessionStorage.getItem("ErrorSin"));
+        $("#errorEng").html(sessionStorage.getItem("ErrorEng"));
+    });
+</script>
+<div class="row">
+    <div class="er-erroPageText" id="errorSin">
+        
+    </div>
+    <div class="er-erroPageText" id="errorEng">
+        
+    </div>
+</div>
+<div class="row">
+    <img src="/images/error-graphic.png" alt="Paris" class="erroPageImage">
+</div>
+<div class="row">
+    <div></div>
+</div>
+

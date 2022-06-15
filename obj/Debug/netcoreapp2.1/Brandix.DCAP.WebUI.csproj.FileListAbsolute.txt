@@ -1,0 +1,148 @@
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.deps.json
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.runtimeconfig.json
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.runtimeconfig.dev.json
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.dll
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.pdb
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.Views.dll
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.Views.pdb
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.csprojAssemblyReference.cache
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.csproj.CoreCompileInputs.cache
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorAssemblyInfo.cache
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorAssemblyInfo.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.AssemblyInfoInputs.cache
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.AssemblyInfo.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.TagHelpers.input.cache
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.TagHelpers.output.cache
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorCoreGenerate.cache
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\About.g.cshtml.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Barcode.g.cshtml.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Bulk.g.cshtml.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Error.g.cshtml.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Index.g.cshtml.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Login.g.cshtml.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Shared\Error.g.cshtml.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Shared\_CookieConsentPartial.g.cshtml.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Shared\_Layout.g.cshtml.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Shared\_ValidationScriptsPartial.g.cshtml.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\_ViewImports.g.cshtml.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\_ViewStart.g.cshtml.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorTargetAssemblyInfo.cache
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorTargetAssemblyInfo.cs
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.Views.pdb
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.dll
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.pdb
+D:\ProJectS\DCapV2\DCap-V2\Branches\DEV\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.csproj.CopyComplete
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.deps.json
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.runtimeconfig.json
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.runtimeconfig.dev.json
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.dll
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.pdb
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.Views.dll
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.Views.pdb
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.csprojAssemblyReference.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.csproj.CoreCompileInputs.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorAssemblyInfo.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorAssemblyInfo.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.AssemblyInfoInputs.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.AssemblyInfo.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.TagHelpers.input.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.TagHelpers.output.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorCoreGenerate.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\About.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Barcode.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Bulk.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Error.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Index.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Login.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Shared\Error.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Shared\_CookieConsentPartial.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Shared\_Layout.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Shared\_ValidationScriptsPartial.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\_ViewImports.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\_ViewStart.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorTargetAssemblyInfo.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorTargetAssemblyInfo.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.Views.pdb
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.dll
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.pdb
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.csproj.CopyComplete
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Dispatch.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\BFLProductionBarcode.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\GenerateTravelBarcode.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\InsertOutSourceDetails.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\PrintDispatch.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\UpdateWashDetails.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\PrintTravelTag.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Menu.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\OutsourceDetails.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\GoodReceive.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\MinimumQtyReport.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\GenerateBuddyTag.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\BarcodeDetail.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\BFLStockReport.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\Invoice.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\GatePassSummaryReport.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\InvoiceSummaryReport.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\SecurityUpdate.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI\obj\Debug\netcoreapp2.1\Razor\Views\Home\ManageStyles.g.cshtml.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.deps.json
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.runtimeconfig.json
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.runtimeconfig.dev.json
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.dll
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.pdb
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.Views.dll
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\bin\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.Views.pdb
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.csproj.CoreCompileInputs.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorAssemblyInfo.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorAssemblyInfo.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.AssemblyInfoInputs.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.AssemblyInfo.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.TagHelpers.input.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.TagHelpers.output.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorCoreGenerate.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorTargetAssemblyInfo.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.RazorTargetAssemblyInfo.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.Views.pdb
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.dll
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.pdb
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.csproj.CopyComplete
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\bin\Debug\netcoreapp2.1\NOTICE.TXT
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\bin\Debug\netcoreapp2.1\appsettings.Development.json
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\bin\Debug\netcoreapp2.1\appsettings.json
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\bin\Debug\netcoreapp2.1\package-lock.json
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\About.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\Barcode.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\BarcodeDetail.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\BarcodeScanErrorCorrector.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\BFLProductionBarcode.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\BFLStockReport.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\Bulk.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\CreateBulkBagBarcode.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\Dispatch.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\Error.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\FindBarcodeOperationHistory.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\GatePassSummaryReport.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\GenerateBuddyTag.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\GenerateTravelBarcode.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\GoodReceive.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\GroupBarcodeAudit.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\Index.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\Invoice.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\InvoiceSummaryReport.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\Login.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\ManagePackingList.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\ManageStyles.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\Menu.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\MinimumQtyReport.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\NonApperalDataManager.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\OutsourceDetails.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\SecurityUpdate.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Home\UpdateWashDetails.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Shared\Error.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Shared\_CookieConsentPartial.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Shared\_Layout.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\Shared\_ValidationScriptsPartial.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\_ViewImports.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Razor\Views\_ViewStart.cshtml.g.cs
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.genruntimeconfig.cache
+C:\Projects\DCap\App\Brandix.DCAP.WebUI - OutSource\obj\Debug\netcoreapp2.1\Brandix.DCAP.WebUI.csproj.AssemblyReference.cache

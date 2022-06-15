@@ -1,0 +1,3455 @@
+﻿@{
+    Layout = "_Layout";
+}
+
+
+<script type="text/javascript">
+    var selectedDate = null;
+    var fromdatePicker = null;
+    var todatePicker = null;
+    var scheduleObject = null;
+    var operationList = null;
+    var todayDate = null;
+    var scrapItems = [];
+    var SoberSheetMode = false;
+    var SSheetSCHNo = null;
+    var SSheetSCHId = null;
+    var SSAlreadySaved = false;
+
+    //views
+    var createNewPass = null;
+    var addItemsGrid = null;
+    var updateStatus = null;
+    var showInfo = null;
+    var checkAllBagsWindow = null;
+    var printpdfwindow = null;
+    var manageParametrs = null;
+
+    //Items
+    var rowDataItem = null;
+    var dispatchid = null;
+    var userPermissionList = null;
+
+    var clickedbutton = 0;
+    var expandedTableWindow = null;
+    var errorTableWindow = null;
+
+    //Grid functions - checkbox selection
+    var checkedIds = {};
+    
+    getSessionInfo();
+
+    $(document).ready(function () {
+        $('#sitebody').removeClass('body-login');
+        $("#sitebody").append(
+            '<div id="ajaxBusy" class="ajaxBusy"></div>'
+        );
+        $("#ajaxBusy").hide();
+        checkLoginStatus();
+        $('#pageTitleBar').html('<i class="fas fa-barcode pageMainIcon"></i><span class="pageTitle">DCap - Invoice</span>');
+        initializeControls();
+
+        checkIdle();
+        if (isValidClient == Answer.Null) {
+            window.location.href = "Login";
+        } else if (false) {//!userPermissionList.some(permission => permission.functionId === AccessibleFunctions.GenerateInvoices)
+            msgBox.show('ඔබට ඉන්වොයිසි ජනනය කිරීමට අවසර නැත.', 'You do not have permission to generate invoices.', 'අවවාදයයි / Warning', 'BS01', 'Warning', function(){window.location.href = "Menu";});
+        }
+        else if (isValidClient != null && clientconfig.dataCaptureMode != DataCaptureMode.Bulk) {
+            if (clientconfig.dataCaptureMode == DataCaptureMode.Barcode) {
+                msgBox.show('මෙම යන්ත්‍රයට බල්ක් අප්ඩේට් කිරීම සඳහා අවසර නැත.', 'This device is not authorized for Bulk update', 'අවවාදයයි / Warning', 'BU01', 'Warning', function () {
+                    if (clientconfig.dataCaptureMode == DataCaptureMode.Washing) {
+                        window.location.href = "Menu";
+                    }
+                });
+            }
+        }
+    });
+
+    function checkLoginStatus() {
+        if (sessionStorage.getItem("UserId") != "") {
+            $("#toolBarLoggedinUser").html(sessionStorage.getItem("UserId"));
+        } else {
+            $("#toolBarLoggedinUser").html("");
+        }
+        if (sessionStorage.getItem("IsSignedIn") == Answer.Null || sessionStorage.getItem("IsSignedIn") == Answer.No) {
+            $("#loginBar").hide();
+            window.location.href = "Login";
+        } else {
+            $("#loginBar").show();
+        }
+    }
+
+    function initializeControls() { 
+        userPermissionList = JSON.parse(sessionStorage.getItem("UserPermissionList"));
+        //console.log("to check permission for gatepass:", AccessibleDispatchFunctions, userPermissionList);
+        //if (userPermissionList.some(permission => permission.functionId === AccessibleDispatchFunctions.CreateGatepass)) {
+            $("#createNewGatePass").show();
+        //} else {
+           //$("#createNewGatePass").hide(); 
+        //}
+        //Data selectors
+        $("#FromDate").kendoDatePicker({format:"yyyy-MM-dd",min:new Date(1900,0,1,0,0,0,0),max:new Date(2099,11,31,0,0,0,0)});
+        $("#ToDate").kendoDatePicker({format:"yyyy-MM-dd",min:new Date(1900,0,1,0,0,0,0),max:new Date(2099,11,31,0,0,0,0)});
+        todayDate = new Date();
+        $("#FromDate").data("kendoDatePicker").value('');
+        $("#ToDate").data("kendoDatePicker").value(todayDate);
+
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetFactoryNames',
+            type: 'GET',
+            dataType: 'json',
+            async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                if(response[0] != null) {
+                    $("#newLocationToFilter").kendoDropDownList({"dataSource": response,filter: "contains","dataTextField": "loc_Description","dataValueField": "loc_Code","optionLabel": "Select a location..."});
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Invoice");
+            }
+        });
+
+        $("#InvoiceStatusFilter").kendoDropDownList({dataSource:[{"Text":"All","Value":"2"},
+                                                    {"Text":"Completed","Value":"1"},
+                                                    {"Text":"Pending","Value":"0"}],
+                                                    "dataTextField":"Text","dataValueField":"Value"});
+
+        $("#Month").kendoDatePicker({
+                    start: "year",
+                    depth: "year",
+                    format: "yyyy-MM",
+                    dateInput: true
+                });
+
+        $("#MonthFilter").kendoDatePicker({
+                    start: "year",
+                    depth: "year",
+                    format: "yyyy-MM",
+                    dateInput: true
+                });
+
+        //console.log(sessionStorage.TxUser.userId);//use UserPermissionList to configure factory user details 
+        
+        $("#RequestIdFilter").keydown(function (e) {
+                if (e.keyCode == 13) {
+                    RefreshRequestGrid();
+                }
+        });
+
+        $("#scanBagBarodeSearch").keydown(function (e) {
+                if (e.keyCode == 13) {
+                    highlightRow();
+                }
+        });
+
+                dataSource = new kendo.data.DataSource({
+                transport: {
+                        read: function (options) {
+                            refreshParameterGrid();
+                        /* implementation omitted for brevity */
+                        },
+                        update: function(options) {
+                            //console.log("update row data: ", JSON.stringify(options.data.models));
+                            if (true) {//userPermissionList.some(permission => permission.functionId === AccessibleFunctions.UpdateWashDetails)
+                                var modeldata = options.data.models;
+                                $.each(modeldata, function (index, elements) {
+                                    modeldata[index].Mode = 1;
+                                    modeldata[index].ModifiedBy = JSON.parse(sessionStorage.getItem("Clientconfig")).clientId;
+                                });
+
+                                $.ajax({
+                                    url: "@ViewBag.APIURL/BusinessLogics/ManageInvoiceParameters",
+                                    type: 'POST',
+                                    dataType: "json",
+                                    data: JSON.stringify(modeldata),
+                                    contentType: 'application/json; charset=utf-8',
+                                    success: function(result) {
+                                        if(result.length != 0) {
+                                            if(result[0].saveSuccessfull == false) {
+                                                msgBox.show(result[0].responce[0], result[0].responce[1] , 'Warning', 'BU05', 'Warning', function(){
+                                                    refreshParameterGrid();
+                                                    options.success([]);
+                                                });
+                                            } else {
+                                                refreshParameterGrid();
+                                                options.success(result);
+                                            }
+                                        } else {
+                                            msgBox.show('යාවත්කාලීන කිරීම අසාර්ථක විය.', 'Update failed' , 'Warning', 'BU05', 'Warning', function(){
+                                                refreshParameterGrid();
+                                                options.success([]);
+                                            });
+                                        }
+                                    },
+                                    error: function(result) {
+                                        formatErrorMessage(jqXHR, errorThrown, "Update Details");
+                                        options.error(result);
+                                    }
+                                });
+                            } else {
+                                msgBox.show('විස්තර යාවත්කාලීන කිරීමට ඔබට අවසර නැත.', 'You do not have permission to update the washing details.' , 'Warning', 'BU05', 'Warning', function(){
+                                    refreshParameterGrid();
+                                    options.success([]);
+                                });
+                            }
+                        },
+                        create: function(options) {
+                            //console.log("update row data: ", JSON.stringify(options.data.models));
+                            if (true) {//userPermissionList.some(permission => permission.functionId === AccessibleFunctions.UpdateWashDetails)
+                                var modeldata = options.data.models;
+                                $.each(modeldata, function (index, elements) {
+                                    modeldata[index].Mode = 3;
+                                    modeldata[index].InvoiceKey = 0;
+                                    modeldata[index].ModifiedBy = JSON.parse(sessionStorage.getItem("Clientconfig")).clientId;
+
+                                });
+
+                                $.ajax({
+                                    url: "@ViewBag.APIURL/BusinessLogics/ManageInvoiceParameters",
+                                    type: 'POST',
+                                    dataType: "json",
+                                    data: JSON.stringify(modeldata),
+                                    contentType: 'application/json; charset=utf-8',
+                                    success: function(result) {
+                                        if(result.length != 0) {
+                                            if(result[0].saveSuccessfull == false) {
+                                                msgBox.show(result[0].responce[0], result[0].responce[1] , 'Warning', 'BU05', 'Warning', function(){
+                                                    refreshParameterGrid();
+                                                    options.success([]);
+                                                });
+                                            } else {
+                                                refreshParameterGrid();
+                                                options.success(result);
+                                            }
+                                        } else {
+                                            msgBox.show('යාවත්කාලීන කිරීම අසාර්ථක විය.', 'Update failed' , 'Warning', 'BU05', 'Warning', function(){
+                                                refreshParameterGrid();
+                                                options.success([]);
+                                            });
+                                        }
+                                    },
+                                    error: function(result) {
+                                        formatErrorMessage(jqXHR, errorThrown, "Update Details");
+                                        options.error(result);
+                                    }
+                                });
+                            } else {
+                                msgBox.show('විස්තර යාවත්කාලීන කිරීමට ඔබට අවසර නැත.', 'You do not have permission to update the washing details.' , 'Warning', 'BU05', 'Warning', function(){
+                                    refreshParameterGrid();
+                                    options.success([]);
+                                });
+                            }
+                        },
+                        destroy: function(options) {
+                            //console.log("update row data: ", JSON.stringify(options.data.models));
+                            if (true) {//userPermissionList.some(permission => permission.functionId === AccessibleFunctions.UpdateWashDetails)
+                                var modeldata = options.data.models;
+                                $.each(modeldata, function (index, elements) {
+                                    modeldata[index].Mode = 2;
+                                    modeldata[index].ModifiedBy = JSON.parse(sessionStorage.getItem("Clientconfig")).clientId;
+                                });
+
+                                $.ajax({
+                                    url: "@ViewBag.APIURL/BusinessLogics/ManageInvoiceParameters",
+                                    type: 'POST',
+                                    dataType: "json",
+                                    data: JSON.stringify(modeldata),
+                                    contentType: 'application/json; charset=utf-8',
+                                    success: function(result) {
+                                        if(result.length != 0) {
+                                            if(result[0].saveSuccessfull == false) {
+                                                msgBox.show(result[0].responce[0], result[0].responce[1] , 'Warning', 'BU05', 'Warning', function(){
+                                                    refreshParameterGrid();
+                                                    options.success([]);
+                                                });
+                                            } else {
+                                                refreshParameterGrid();
+                                                options.success(result);
+                                            }
+                                        } else {
+                                            msgBox.show('යාවත්කාලීන කිරීම අසාර්ථක විය.', 'Update failed' , 'Warning', 'BU05', 'Warning', function(){
+                                                refreshParameterGrid();
+                                                options.success([]);
+                                            });
+                                        }
+                                    },
+                                    error: function(result) {
+                                        formatErrorMessage(jqXHR, errorThrown, "Update Details");
+                                        options.error(result);
+                                    }
+                                });                             
+                            } else {
+                                msgBox.show('විස්තර යාවත්කාලීන කිරීමට ඔබට අවසර නැත.', 'You do not have permission to update the washing details.' , 'Warning', 'BU05', 'Warning', function(){
+                                    refreshParameterGrid();
+                                    options.success([]);
+                                });
+                            }
+                        }
+                    },
+                    batch: true,
+                    pageSize: 5,
+                    schema: {
+                        model: {
+                            id: "InvoiceKey",
+                            fields: {
+                                Mode: { type: "number", editable: false },
+                                InvoiceKey: { type: "string", editable: false },
+                                NextInvoiceNo: { type: "string", editable: false },
+                                VAT: {type: "number", editable: true ,  validation: { required: true } },
+                                NBT: { type: "number", editable: true ,  validation: { required: true } },
+                                ExchangeRate: { type: "number", editable: true , validation: { required: true } },
+                                EffectiveDateFrom: { type: "date", editable: true , validation: { required: true } },
+                                EffectiveDateTo: { type: "date", editable: true , validation: { required: true } },
+                                ModifiedDateTime: { type: "date", editable: false },
+                                ModifiedBy: { type: "string", editable: false },
+                            }
+                        }
+                    }
+                });
+
+                $("#manage-parameters-grid").kendoGrid({
+                    dataSource: dataSource,
+                    toolbar: ["create","pdf", "excel"],
+                    pdf: {
+                        allPages: true,
+                        author: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                        creator: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                        fileName: "invoice parameters",
+                    },
+                    excel: {
+                        allPages: true,
+                        fileName: "invoice parameters.xlsx",
+                        filterable: true
+                    },
+                    reorderable: true,
+                    resizable: true,
+                    scrollable: true,     
+                    sortable: true,
+                    filterable: true,
+                    pageable: {
+                        refresh: true,
+                        pageSizes: true,
+                        buttonCount: 5
+                    },
+                    columns: [
+                        { field:"Mode", title: "Mode", width: "120px", hidden: true },
+                        { field:"InvoiceKey", title: "InvoiceKey", width: "120px", hidden: true },
+                        { field:"NextInvoiceNo", title: "Highest Invoice No. in Seq.", width: "120px" },
+                        { field:"VAT", title: "VAT", width: "120px", format: "{0:p0}"},
+                        { field:"NBT", title: "NBT", width: "120px", format: "{0:p0}" },
+                        { field:"ExchangeRate", title: "Exchange Rate", width: "120px" },
+                        { field:"EffectiveDateFrom", title: "Effective Date From", width: "150px" },
+                        { field:"EffectiveDateTo", title: "Effective Date To", width: "150px" },
+                        { field:"ModifiedDateTime", title: "Modified Date", width: "150px" },
+                        { field:"ModifiedBy", title: "ModifiedBy", width: "150px"  },
+                        { command: ["edit", "destroy"], title: "&nbsp;", width: "200px" }],
+                    editable: "inline"
+                });
+
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetFactoryNames',
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                $("#LocationToFilter").kendoDropDownList({"dataSource": response,filter: "contains","dataTextField": "loc_Description","dataValueField": "loc_Code","optionLabel": "Select a location..."});
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Invoice");
+            }
+        });
+
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetUsersByFunction?FunctionId=' + AccessibleDispatchFunctions.CreateGatepass,
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                $("#CreatedByFilter").kendoDropDownList({"dataSource": response, filter: "contains","dataTextField": "userName","dataValueField": "userId","optionLabel": "Select a user..."});
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Invoice");
+            }
+        });
+        
+        //End of data selections
+
+        //For Request loading
+        //Grid definition
+        //Start of Home Request Summary Grid
+        $("#request-grid").kendoGrid({
+            toolbar: ["pdf", "excel"],
+            pdf: {
+                allPages: true,
+                author: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                creator: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                date: (new Date()).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric'}),
+                fileName: "request summary"
+            },
+            excel: {
+                allPages: true,
+                fileName: "request-summary.xlsx",
+                filterable: true
+            },
+            reorderable: true,
+            resizable: true,
+            scrollable: true,  
+            dataBound: OnGridDataBound,     
+            sortable: true,
+            filterable: true,
+            pageable: true,
+            pageable: {
+                    pageSizes: true,
+                    buttonCount: 10
+                },
+            dataSource: {
+                schema: {
+                    model: {
+                        id: "ControlId",
+                        fields: {
+                            Status: { editable: false },
+                            InvoiceStatus: { type: "number", editable: false },
+                            InvoiceNumber: { type: "string", editable: false },
+                            ControlId: { type: "string", editable: false },
+                            REType: { type: "string", editable: false },
+                            DEPId: { type: "string", editable: false },
+                            Seq: { editable: false },
+                            Type: { editable: false },
+                            Approver: { type: "string", editable: false },
+                            LocationFrom: { type: "string", editable: false },
+                            LocationTo: { type: "string", editable: false },
+                            Address: { editable: true },
+                            DepartmentName: { type: "string", editable: false },
+                            Quantity: { type: "string", editable: false },
+                            CreatedBy: { type: "string", editable: false },
+                            CreatedOn: { type: "date", editable: false },
+                            Remark: { type: "string", editable: false },
+                        },
+                    }
+                },
+                batch: true,
+                pageSize: 5,
+            },
+            columns:[
+                        {title:"Status",field:"Status",width:"290px", filterable: false, template: "#if (Status == '1' ) {# <div class='mb-2 mr-2 badge badge-primary const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Pending Approval" + 
+                        "</div> #} else if (Status == '2'){ # <div class='mb-2 mr-2 badge badge-secondary const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Approved - Not Send" +
+                        "</div> #} else if (Status == '3'){ # <div class='mb-2 mr-2 badge badge-success const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Security Passed" +
+                        "</div> #} else if (Status == '4'){ # <div class='mb-2 mr-2 badge badge-info const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Security Recevied" +
+                        "</div> #} else if (Status == '5'){ # <div class='mb-2 mr-2 badge badge-warning const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Closed" +
+                        "</div> #}#" },
+                        {title:"Invoice",field:"InvoiceStatus",width:"220px", filterable: false,encoded:true, template: "#if (parseInt(InvoiceStatus) == 0 ) {# <div><button id='printGatePassRequestButton' class='k-button print-request-status' style='width: 90%; height: 40px; margin-left: 10px;' onclick='setButtonStatus(1)'><span class='k-icon k-i-indent-increase' style='margin-right: 7px; text-align:left;'></span><span>Create Invoice</span></button>" + 
+                        "</div> #} else if (parseInt(InvoiceStatus) == 1){ # <div style='text-align: center;'><button id='printGatePassRequestButton' onclick='setButtonStatus(2)' class='k-button print-request-status' style='width: 90%; height: 40px; background-color: aliceblue !important;'><span class='k-icon k-i-print' style='margin-right: 7px; text-align:left;'></span><span>Print</span></button>" + 
+                        "</div> #}#" },
+                        {title:"Invoice No.",field:"InvoiceNumber",width:"135px",encoded:true},
+                        {title:"Request No",field:"ControlId",width:"135px",encoded:true},
+                        {title:"Request Type",field:"REType",width:"180px",encoded:true, filterable: false, template: "#if (REType == '100' ) {# <div>Factory Invoice (100)" + 
+                        "</div> #} else if (REType == '200'){ # <div>BFL Invoice (200)" +
+                        "</div> #}#"},
+                        {title:"DEPId",field:"DEPId",width:"140px",encoded:true, hidden:true},
+                        {title:"Seq",field:"Seq",width:"105px",encoded:true, hidden:true},
+                        {title:"Location From",field:"LocationFrom",width:"155px"},
+                        {title:"Approver",field:"Approver",width:"140px",encoded:true},
+                        {title:"Receiver Location",field:"LocationTo",width:"180px",encoded:true, filterable: false},
+                        {title:"Receiver Address",field:"Address",width:"230px",encoded:true},
+                        {title:"Receiver Department",field:"DepartmentName",width:"215px",encoded:true, filterable: false, template: "#if (DepartmentName == '1' ) {# <div>Washing out (Factory)" + 
+                        "</div> #} else if (DepartmentName == '2'){ # <div>Washing in (BFL)" +
+                        "</div> #} else if (DepartmentName == '3'){ # <div>Washing out (BFL)" +
+                        "</div> #} else if (DepartmentName == '4'){ # <div>Washing receive (Factory)" +
+                        "</div> #}#" },
+                        {title:"Quantity",field:"Quantity",width:"112px",encoded:true},
+                        {title:"Created By",field:"CreatedBy",width:"13 5px",encoded:true},
+                        {title:"Created",field:"CreatedOn",width:"133px",filterable:{operators:{date:{gte:"From",lte:"To"}}}},//template: "#= kendo.toString(kendo.parseDate(CreatedOn, 'yyyy-MM-ddhh:mm:ss'), 'MM/dd/yyyy') #"
+                        {title:"Remarks",field:"Remark",width:"200px",encoded:true}, 
+                        {title:"Info", width:"90px", command: [{ name: "info",
+                                    template: "<a class='k-button k-grid-info k-small'><span class='k-icon k-i-information'></span> info</a>",
+                                    click(e){
+                                                setButtonStatus(3)
+                                                //console.log("info button clicked");
+                                            }
+                                    }
+                        ]},     
+                    ],
+        });
+        //End of Home Request Summary Grid
+
+        //Item Grid Initilize
+        $("#request-items-grid").kendoGrid({
+            dataSource: {
+                schema: {
+                    model: {
+                        id: "Key",
+                        fields: {
+                            Key: { type: "string", editable: false },
+                            Status: { editable: false },
+                            InvoiceStatus: { type: "number", editable: false },
+                            InvoiceNumber: { type: "string", editable: false },
+                            ControlId: { type: "string", editable: false },
+                            REType: { type: "string", editable: false },
+                            DEPId: { type: "string", editable: false },
+                            Seq: { editable: false },
+                            Type: { editable: false },
+                            Approver: { type: "string", editable: false },
+                            LocationFrom: { type: "string", editable: false },
+                            LocationTo: { type: "string", editable: false },
+                            Address: { editable: true },
+                            DepartmentName: { type: "string", editable: false },
+                            Quantity: { type: "string", editable: false },
+                            CreatedBy: { type: "string", editable: false },
+                            CreatedOn: { type: "date", editable: false },
+                            Remark: { type: "string", editable: false },
+                        },
+                    }
+                },
+                batch: true,
+                aggregate: [{ field: "Quantity", aggregate: "sum" }]
+            },
+            navigatable: true,
+            scrollable: true,
+            dataBound: OnGridDataBound,
+            persistSelection: true,        
+            sortable: true,
+            filterable: true,
+            editable: true,
+            columns:[
+                        {title:"Status",field:"Status",width:"290px", filterable: false, hidden: true, template: "#if (Status == '1' ) {# <div class='mb-2 mr-2 badge badge-primary const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Pending Approval" + 
+                        "</div> #} else if (Status == '2'){ # <div class='mb-2 mr-2 badge badge-secondary const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Approved - Not Send" +
+                        "</div> #} else if (Status == '3'){ # <div class='mb-2 mr-2 badge badge-success const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Security Passed" +
+                        "</div> #} else if (Status == '4'){ # <div class='mb-2 mr-2 badge badge-info const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Security Recevied" +
+                        "</div> #} else if (Status == '5'){ # <div class='mb-2 mr-2 badge badge-warning const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Closed" +
+                        "</div> #}#" },
+                        {title:"Status",field:"InvoiceStatus",width:"220px", filterable: false,encoded:true, template: "#if (parseInt(InvoiceStatus) == 0 ) {# <div class='mb-2 mr-2 badge badge-warning const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Pending" +
+                        "</div> #} else if (parseInt(InvoiceStatus) == 1){ # <div class='mb-2 mr-2 badge badge-success const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Success" + 
+                        "</div> #} else if (parseInt(InvoiceStatus) == 2){ # <div class='mb-2 mr-2 badge badge-info const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>In-Progress" +
+                        "</div> #} else if (parseInt(InvoiceStatus) == 3){ # <div class='mb-2 mr-2 badge badge-danger const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Failed" +
+                        "</div> #}#" },
+                        {title:"Invoice No.",field:"InvoiceNumber",width:"135px",encoded:true},
+                        {title:"Remarks",field:"Remark", width:"200px",encoded:true},
+                        {title:"Request No",field:"ControlId",width:"135px",encoded:true},
+                        {title:"Request Type",field:"REType",width:"180px",encoded:true, filterable: false, template: "#if (REType == '100' ) {# <div>Factory Invoice (100)" + 
+                        "</div> #} else if (REType == '200'){ # <div>BFL Invoice (200)" +
+                        "</div> #}#"},
+                        {title:"DEPId",field:"DEPId",width:"140px",encoded:true, hidden:true},
+                        {title:"Seq",field:"Seq",width:"105px",encoded:true, hidden:true},
+                        {title:"Location From",field:"LocationFrom",width:"155px"},
+                        {title:"Approver",field:"Approver",width:"140px", hidden: true, encoded:true},
+                        {title:"Receiver Location",field:"LocationTo",width:"180px",encoded:true, filterable: false},
+                        {title:"Receiver Department",field:"DepartmentName", hidden: true, width:"215px",encoded:true, filterable: false, template: "#if (DepartmentName == '1' ) {# <div>Washing out (Factory)" + 
+                        "</div> #} else if (DepartmentName == '2'){ # <div>Washing in (BFL)" +
+                        "</div> #} else if (DepartmentName == '3'){ # <div>Washing out (BFL)" +
+                        "</div> #} else if (DepartmentName == '4'){ # <div>Washing receive (Factory)" +
+                        "</div> #}#" },
+                        {title:"Quantity",field:"Quantity",width:"112px",encoded:true},
+                        {title:"Created By",field:"CreatedBy", hidden: true, width:"13 5px",encoded:true},
+                        {title:"Created",field:"CreatedOn", hidden: true, width:"133px",filterable:{operators:{date:{gte:"From",lte:"To"}}}},//template: "#= kendo.toString(kendo.parseDate(CreatedOn, 'yyyy-MM-ddhh:mm:ss'), 'MM/dd/yyyy') #"  
+                    ],
+ 
+        });
+        //End of Item Grid
+
+        //Start of Expanded Window Item Grid
+        $("#expand-items-grid").kendoGrid({
+            toolbar: ["excel"],
+            excel: {
+                allPages: true,
+                fileName: "Invoice-items.xlsx",
+                filterable: true
+            },
+            dataSource: {
+                schema: {
+                    model: {
+                        id: "LocationFrom",
+                        fields: {
+                            Key: { type: "string", editable: false },
+                            Status: { editable: false },
+                            InvoiceStatus: { type: "number", editable: false },
+                            InvoiceNumber: { type: "string", editable: false },
+                            ControlId: { type: "string", editable: false },
+                            REType: { type: "string", editable: false },
+                            DEPId: { type: "string", editable: false },
+                            Seq: { editable: false },
+                            Type: { editable: false },
+                            Approver: { type: "string", editable: false },
+                            LocationFrom: { type: "string", editable: false },
+                            LocationTo: { type: "string", editable: false },
+                            Address: { editable: true },
+                            DepartmentName: { type: "string", editable: false },
+                            Quantity: { type: "string", editable: false },
+                            CreatedBy: { type: "string", editable: false },
+                            CreatedOn: { type: "date", editable: false },
+                            Remark: { type: "string", editable: false },
+                        },
+                    }
+                },
+                batch: true,
+                group: {
+                            field: "Key", aggregates: [
+                                { field: "LocationTo", aggregate: "count" },
+                                { field: "Quantity", aggregate: "sum"},
+                                { field: "Key", aggregate: "count" }
+                            ]
+                        },
+                aggregate: [ { field: "LocationTo", aggregate: "count" },
+                             { field: "Quantity", aggregate: "sum" },
+                             { field: "Key", aggregate: "min" },
+                             { field: "Key", aggregate: "max" }]
+            },
+            navigatable: true,
+            scrollable: true,
+            dataBound: OnGridDataBound,
+            persistSelection: true,        
+            sortable: true,
+            filterable: true,
+            resizable: true,
+            editable: true,
+            columns: [
+                        {title:"Invoice",field:"InvoiceStatus",width:"220px", filterable: false,encoded:true, template: "#if (parseInt(InvoiceStatus) == 0 ) {# <div class='mb-2 mr-2 badge badge-warning const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Pending" +
+                        "</div> #} else if (parseInt(InvoiceStatus) == 1){ # <div class='mb-2 mr-2 badge badge-success const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Success" + 
+                        "</div> #} else if (parseInt(InvoiceStatus) == 2){ # <div class='mb-2 mr-2 badge badge-info const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>In-Progress" +
+                        "</div> #} else if (parseInt(InvoiceStatus) == 3){ # <div class='mb-2 mr-2 badge badge-danger const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Failed" +
+                        "</div> #}#" },
+                        {title:"Invoice No.",field:"InvoiceNumber",width:"135px",encoded:true},
+                        {title:"Remarks",field:"Remark", width:"200px",encoded:true},
+                        {title:"Gate Pass Status",field:"Status",width:"290px", filterable: false, template: "#if (Status == '1' ) {# <div class='mb-2 mr-2 badge badge-primary const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Pending Approval" + 
+                        "</div> #} else if (Status == '2'){ # <div class='mb-2 mr-2 badge badge-secondary const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Approved - Not Send" +
+                        "</div> #} else if (Status == '3'){ # <div class='mb-2 mr-2 badge badge-success const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Security Passed" +
+                        "</div> #} else if (Status == '4'){ # <div class='mb-2 mr-2 badge badge-info const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Security Recevied" +
+                        "</div> #} else if (Status == '5'){ # <div class='mb-2 mr-2 badge badge-warning const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Closed" +
+                        "</div> #}#" },
+                        {title:"Request No",field:"ControlId",width:"135px",encoded:true},
+                        {title:"Request Type",field:"REType",width:"180px",encoded:true, filterable: false, template: "#if (REType == '100' ) {# <div>Factory Invoice (100)" + 
+                        "</div> #} else if (REType == '200'){ # <div>BFL Invoice (200)" +
+                        "</div> #}#"},
+                        {title:"DEPId",field:"DEPId",width:"140px",encoded:true, hidden:true},
+                        {title:"Seq",field:"Seq",width:"105px",encoded:true, hidden:true},
+                        {title:"Location From",field:"LocationFrom",width:"155px"},
+                        {title:"Approver",field:"Approver",width:"140px", encoded:true},
+                        {title:"Receiver Location",field:"LocationTo",width:"180px",encoded:true, filterable: false},
+                        {title:"Receiver Department",field:"DepartmentName", width:"215px",encoded:true, filterable: false, template: "#if (DepartmentName == '1' ) {# <div>Washing out (Factory)" + 
+                        "</div> #} else if (DepartmentName == '2'){ # <div>Washing in (BFL)" +
+                        "</div> #} else if (DepartmentName == '3'){ # <div>Washing out (BFL)" +
+                        "</div> #} else if (DepartmentName == '4'){ # <div>Washing receive (Factory)" +
+                        "</div> #}#" },
+                        {title:"Quantity",field:"Quantity",width:"112px",encoded:true},
+                        {title:"Created By",field:"CreatedBy", width:"13 5px",encoded:true},
+                        {title:"Created",field:"CreatedOn", width:"133px",filterable:{operators:{date:{gte:"From",lte:"To"}}}},//template: "#= kendo.toString(kendo.parseDate(CreatedOn, 'yyyy-MM-ddhh:mm:ss'), 'MM/dd/yyyy') #"
+            ],
+            editable: "inline"
+        });
+        //End of Expanded Window Item Grid
+
+        //Start of Expanded Window Item Grid
+        $("#error-items-grid").kendoGrid({
+            toolbar: ["pdf", "excel"],
+            pdf: {
+                allPages: true,
+                author: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                creator: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                date: (new Date()).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric'}),
+                fileName: "rejected items summary"
+            },
+            excel: {
+                allPages: true,
+                fileName: "Invoice-items.xlsx",
+                filterable: true
+            },
+            dataSource: {
+                schema: {
+                    model: {
+                        id: "bag_Barcode",
+                        fields: {
+                            Key: { type: "string", editable: false },
+                            Bag_Barcode: { type: "string", editable: false },
+                            WFIdBag: { type: "string", editable: false },
+                            DEPIdBag: { type: "string", editable: false },
+                            SeqBag: { type: "string", editable: false },
+                            L1idBag: { type: "string", editable: false },
+                            L2idBag: { type: "string", editable: false },
+                            L3idBag: { type: "string", editable: false },
+                            L4idBag: { type: "string", editable: false },
+                            L5idBag: { type: "string", editable: false },
+                            Mode: { type: "string", editable: false },
+                            Bag_Close_DateTime: { type: "date", editable: false },
+                            Style: { type: "string", editable: false },
+                            Shedule: { type: "string", editable: false },
+                            Color: { type: "string", editable: false },
+                            Quantity: { type: "number", editable: true },
+                            Remarks: { editable: true },
+                            BagStatus: { editable: true },
+                            OrderQuantity: { type: "number", editable: false },
+                            ReportedQuantity: { type: "number", editable: false }
+                        },
+                    }
+                },
+                batch: true,
+                group: {
+                        field: "Key", aggregates: [
+                            { field: "Style", aggregate: "count" },
+                            { field: "Quantity", aggregate: "sum"},
+                            { field: "Key", aggregate: "count" }
+                        ]
+                    },
+                aggregate: [ { field: "Style", aggregate: "count" },
+                             { field: "Quantity", aggregate: "sum" },
+                             { field: "Key", aggregate: "min" },
+                             { field: "Key", aggregate: "max" }]
+            },
+            navigatable: true,
+            scrollable: true,
+            dataBound: OnGridDataBound,
+            persistSelection: true,        
+            sortable: true,
+            filterable: true,
+            resizable: true,
+            editable: true,
+            columns: [
+                { field:"Key",width:"0px", hidden: true },
+                { field: "Bag_Barcode", title: "Barcode", width: "50px", editable: false },
+                { field: "WFIdBag", title: "WFIdBag", width: "50px", hidden: true, editable: false },
+                { field: "DEPIdBag", title: "DEPIdBag", width: "50px", hidden: true, editable: false },
+                { field: "SeqBag", title: "SeqBag", width: "50px", hidden: true, editable: false },
+                { field: "L1idBag", title: "L1idBag", width: "50px", hidden: true, editable: false },
+                { field: "L2idBag", title: "L2idBag", width: "50px", hidden: true, editable: false },
+                { field: "L3idBag", title: "L3idBag", width: "50px", hidden: true, editable: false },
+                { field: "L4idBag", title: "L4idBag", width: "50px", hidden: true, editable: false },
+                { field: "L5idBag", title: "L5idBag", width: "50px", hidden: true, editable: false },
+                { field: "Mode", title: "Mode", width: "50px", editable: false, template: "#if (Mode == '1' ) {# <div>Bag" + 
+                        "</div> #} else if (Mode == '2'){ # <div>Travel Tag" +
+                        "</div> #} else if (Mode == '3'){ # <div>Buddy Tag" +
+                        "</div> #}#"  },
+                { field: "Bag_Close_DateTime", title: "Closed Date and Time", width: "70px", editable: false, format:"{0:dd-MM-yyyy hh:mm:ss}",filterable:{operators:{date:{gte:"From",lte:"To"}}}},
+                { field: "Style", title: "Style", width: "50px", editable: false },
+                { field: "Shedule", title: "Shedule", width: "50px", editable: false },
+                { field: "Color", title: "Color", width: "50px", editable: false },
+                { field: "Quantity", title: "Qty", width: "40px", editable: false, aggregates: ["sum"], groupFooterTemplate: "#=sum#", footerTemplate: "#=sum#"},
+                { field: "Remarks", title: "Remarks", width: "100px", editable: true },
+                { field: "BagStatus", title: "Status", width: "50px", editable: false , filterable: false, template: "#if (BagStatus == '1' ) {# <div>prepared" + 
+                        "</div> #} else if (BagStatus == '0'){ # <div>unprepared" +
+                        "</div> #}#" },
+                { field: "OrderQuantity", title: "Order Qty", width: "50px", editable: false },
+                { field: "ReportedQuantity", title: "Reported Qty", width: "60px", editable: false }
+            ],
+            editable: "inline"
+        });
+        //End of Expanded Window Item Grid
+    }
+
+    function customeEditorRemark(container, options){
+        $('<input id="Remarks" class="k-input" name="Remarks" style="width:180px; border: none;"/>').appendTo(container);
+    }
+
+    function customeEditorQuantitiy(container, options){
+        $('<input id="Quantity" class="k-input" name="Quantity" style="width:180px; border: none;" readonly/>').appendTo(container);
+    }
+
+    function setButtonStatus(n) {
+        clickedbutton = n;
+    }
+
+    function OnGridDataBound(e) {
+        var grid = $("#request-grid").data().kendoGrid; 
+        var gridData = grid.dataSource.view();
+
+        for (var i = 0; i < gridData.length; i++) {
+            var currentUid = gridData[i].uid;
+            if (gridData[i].success == true) {
+                var currentRow = grid.table.find("tr[data-uid='" + currentUid + "']");
+                currentRow.css('background-color', 'lightgreen');
+            }
+        }
+
+        var grid = e.sender;
+        var rows = grid.tbody.find("[role='row']");
+
+        rows.unbind("click");
+        rows.on("click", onClick)
+    }
+
+    function onClick(e) {
+        if ($(e.target).hasClass("k-checkbox-label")) {
+            return;
+        }
+        var row = $(e.target).closest("tr");
+
+        var grid = $("#request-grid").data().kendoGrid; 
+        rowDataItem = grid.dataItem(row);
+        
+        if(clickedbutton == 1) {
+            createInvoice(rowDataItem);
+        } else if (clickedbutton == 2) {
+            openPrintWindow();
+        } else if (clickedbutton == 3) {
+            openInfoWindow();
+        }
+
+        var checkbox = $(row).find(".k-checkbox");
+        checkbox.click();
+
+        clickedbutton = 0;
+    };
+    //end
+
+    function RefreshRequestGrid() {
+        DisableInputs();
+            $("#request-grid").data('kendoGrid').dataSource.data([]);
+            var gridData = [];
+            var wfid = JSON.parse(sessionStorage.getItem("Clientconfig")).wfdepinstId;
+
+            var todate = null;
+            var fromdate = null;
+            var month = $("#Month").val();
+            if(month == "year-month"){
+                todate = $("#ToDate").val();
+                if (todate != "") {
+                    todate + "%2000:00:00";
+                } else {
+                    todate = "0001-01-01%2000:00:00";
+                }
+
+                fromdate = $("#FromDate").val();
+                if (fromdate != "") {
+                    fromdate + "%2000:00:00";
+                } else {
+                    fromdate = "0001-01-01%2000:00:00";
+                }
+            } else {
+                //var mo = parseInt(month.split("-",2)[1]) == 12 ? 1 : (parseInt(month.split("-",2)[1]) + 1);
+                todate = todate = month + "-" + new Date(parseInt(month.split("-",2)[0]),parseInt(month.split("-",2)[1]) == 12 ? 1 : (parseInt(month.split("-",2)[1])),0).getDate() + "%2000:00:00";//month.split("-",2)[0] + "-" + (mo < 10 ? ("0" + mo.toString()) : mo.toString()) + "-01%2000:00:00"
+                fromdate = month + "-01%2000:00:00";
+            }
+            
+            var requestid = $("#RequestIdFilter").val();
+            var invoicestatus = $("#InvoiceStatusFilter").val();
+            var faccode = $("#newLocationToFilter").val();
+
+            $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetInvoiceDispatchDetailsbyInvoice?fromdate=' + fromdate + '&todate=' + todate + '&requestid=' + requestid + '&invoiceStatus=' + invoicestatus + '&faccode=' + faccode,
+                type: 'GET',
+                dataType: 'json',
+                //async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                    EnableInputs();
+                },
+                success: function (response) {
+                    //console.log(response);
+                    if(response.length != 0) {
+                        $.each(response, function (index, elements) {
+                            var object = {
+                                Status: elements.txnStatus,
+                                Type: elements.controlType,
+                                REType: elements.controlType,
+                                InvoiceNumber: elements.invoiceNumber,
+                                InvoiceStatus: elements.invoiceStatus,
+                                ControlId: elements.controlId,
+                                DEPId: elements.depid,
+                                Seq: elements.seq,
+                                Approver: elements.approver,
+                                LocationFrom: elements.locFromCode,
+                                LocationTo: elements.locName,
+                                DepartmentName: elements.depid,
+                                CreatedBy: elements.created,
+                                CreatedOn: formatDate(elements.createdDateTime), //$.datepicker.formatDate('dd-mm-yy', new Date(elements.txnDateTime)),
+                                Quantity: elements.qty01,
+                                Remark: elements.remark,
+                                Address: elements.locAddress,
+                            }
+                            gridData.push(object);
+                        });
+
+                        $("#request-grid").data('kendoGrid').dataSource.data(gridData);
+                    }
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                    EnableInputs();
+                }
+            });
+    }
+
+    function getSessionInfo() {
+        isValidClient = sessionStorage.getItem("IsValidClient");
+        clientconfig = JSON.parse(sessionStorage.getItem("Clientconfig"));
+        userPermissionList = JSON.parse(sessionStorage.getItem("UserPermissionList"));
+        clientIP = sessionStorage.getItem("ClientIP");
+    }
+
+    //CREATE NEW REQUEST
+    function openCreateNewPass() {
+        createNewPass = $("#createNewPass").kendoWindow({
+            //width: "60%",
+            title: "Generate Invoices",
+            visible: false,
+            actions: ["Close"],
+            modal: true,
+            resizable: false,
+            draggable: true,
+            pinned: true,
+        }).data("kendoWindow");
+
+        var arrows = [38, 40];
+        createNewPass.open().center();
+
+        resetControlers();
+    }
+
+    //Controllers
+    function OnLocationToChanged() {
+        DisableInputs();
+        var locationTo = $("#newLocationToFilter").data("kendoDropDownList").value();
+            $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetLocationAddressByCode?inputLocCode=' + locationTo,
+                type: 'GET',
+                async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {
+                    if(response[0] != null) {
+                        $("#address").val(response[0].loc_Address);
+                        EnableInputs();
+                    }
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                    EnableInputs();
+                }
+            });
+    }
+
+    function ValidateType() { 
+        var type = null;
+        DisableInputs();
+        type = $("#newRequestTypeFilter").data("kendoDropDownList").value();
+
+        if(type != "") {
+            $("#open-request-item-window-button").removeAttr("disabled");
+            $("#open-request-expand-window-button").removeAttr("disabled");
+        } else {
+            $('#open-request-item-window-button').attr("disabled", "disabled");
+            $('#open-request-expand-window-button').attr("disabled", "disabled");
+        }
+        $("#request-items-grid").data("kendoGrid").dataSource.data([]);
+        EnableInputs();
+    }
+
+    function validateCreateRequest(){
+        var type = null;
+        var locationTo = null;
+        var departmentTo = null;
+        var address = null;
+        var approver = null;
+
+        var isValid = true;
+
+        type = $("#newRequestTypeFilter").data("kendoDropDownList").value();
+        locationTo = $("#newLocationToFilter").data("kendoDropDownList").value();
+        address = $("#address").val();
+        departmentTo = $("#departmentTo").data("kendoDropDownList").value();
+        approvers = $("#approvers_taglist").data("kendoDropDownList").value();
+        
+        if(type == "") {
+            $("#newRequestTypeFilter").addClass("invalid-input");
+            isValid = false;
+        }
+        if(locationTo == "") {
+            $("#newLocationToFilter").addClass("invalid-input");
+            isValid = false;
+        }
+        if(address == "") {
+            $("#address").addClass("invalid-input");
+            isValid = false;
+        }
+        if(departmentTo == "") {
+            $("#departmentTo").addClass("invalid-input");
+            isValid = false;
+        }
+        if(approvers == "") {
+            $("#approvers_taglist").addClass("invalid-input");
+            isValid = false;
+        }
+        if($("#request-items-grid").data("kendoGrid").dataSource.data().length == 0) {
+            $("#request-items-grid").addClass("invalid-input");
+            isValid = false;
+        }
+        return isValid;
+    }
+
+    function generateInvoices() {
+        DisableInputs();
+        var isValid =true; // validateCreateRequest();
+        if(isValid) {
+            
+            $("#ajaxBusy").show();
+            var selectedgridData = $("#request-items-grid").data("kendoGrid").dataSource.data();
+            var tableData = [];
+            
+            $.each(selectedgridData, function (index, elements) {
+                setTimeout(() => {
+                    var tableRowData = {
+                        Status: elements.Status,
+                        Type: elements.Type,
+                        ControlType: elements.REType,
+                        InvoiceNumber: elements.InvoiceNumber,
+                        InvoiceStatus: elements.InvoiceStatus,
+                        ControlId: elements.ControlId,
+                        DEPId: elements.depid,
+                        Seq: elements.Seq,
+                        Approver: elements.Approver,
+                        LocationFrom: elements.LocationFrom,
+                        LocationTo: elements.LocationTo,
+                        DepartmentName: elements.DepartmentName,
+                        Quantity: elements.Quantity,
+                        Remark: elements.Remark,
+                        Address: elements.Address,
+                        CreatedBy: sessionStorage.UserId,
+                        CreatedMachine: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                        ModifiedBy: sessionStorage.UserId,
+                        ModifiedMachine: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                    }
+
+                    //createInvoiceBulk(index, tableRowData);
+                    DisableInputs();
+                    var isValid = true; //validateCreateRequest();
+                    var selectedgridData = $("#request-items-grid").data("kendoGrid").dataSource.data();
+                    if(isValid) {
+                        var selectedgridData = $("#request-items-grid").data("kendoGrid").dataSource.data();
+                        var tableData = [];
+                        
+                        tableData.push(tableRowData);
+
+                        if (tableData != null && tableData.length > 0) {
+                                var gridData = [];
+                                $.ajax({
+                                    url: '@ViewBag.APIURL/BusinessLogics/CreateInvoice',
+                                    type: 'POST',
+                                    dataType: 'json',
+                                    async: false,
+                                    data: JSON.stringify(tableData),
+                                    contentType: 'application/json; charset=utf-8',
+                                    beforeSend: function () {
+                                        selectedgridData[index].InvoiceStatus = 2;
+                                        $("#request-items-grid").data("kendoGrid").dataSource.data(selectedgridData);
+                                    },
+                                    complete: function () {
+                                    },
+                                    success: function (response) {
+                                        //console.log("Update Invoice Success Response", response[0].responce[0]);
+                                        console.log(response.length);
+                                        if(response.length > 0){
+                                            if(response[0].saveSuccessfull) {
+                                                //createNewPass.close();
+                                                //resetControlers();
+                                                //msgBox.show('සුරැකීම සාර්ථක..', 'Save successful.', 'Warning', 'BU05', 'Warning', null);
+                                                selectedgridData[index].InvoiceStatus = 1;
+                                                selectedgridData[index].InvoiceNumber = response[0].invoiceNumber;
+                                                $("#request-items-grid").data("kendoGrid").dataSource.data(selectedgridData);
+                                            } else {
+                                                selectedgridData[index].InvoiceStatus = 3;
+                                                selectedgridData[index].Remark = (response[0].responce != null ? response[0].responce[0] : '');
+                                                $("#request-items-grid").data("kendoGrid").dataSource.data(selectedgridData);
+                                                //msgBox.show('සුරැකීම අසාර්ථක විය..' + (response[0].responce != null ? response[0].responce[0] : ''), 'Save failed.', 'Warning', 'BU05', 'Warning', null);
+                                            }
+                                        } else {
+                                            
+                                            selectedgridData[index].InvoiceStatus = 3;
+                                            selectedgridData[index].Remark = 'API Response length is 0';
+                                            $("#request-items-grid").data("kendoGrid").dataSource.data(selectedgridData);
+                                            //msgBox.show('සුරැකීම අසාර්ථක විය..', 'Save failed.', 'Warning', 'BU05', 'Warning', null);
+                                        }
+                                        EnableInputs();
+                                    },
+                                    error: function (jqXHR, textStatus, errorThrown) {
+                                        formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                                        EnableInputs();
+                                    }
+                                });
+                            }
+                            else {
+                                //msgBox.show('කරුණාකර තෝරාගත් අයිතම පරීක්ෂා කර නැවත උත්සාහ කරන්න', 'Error occcured. Item table data is null. ', 'Warning', 'BU05', 'Warning', null);
+                                selectedgridData[index].InvoiceStatus = 3;
+                                selectedgridData[index].Remark = 'Error occcured. Item table data is null.';
+                                $("#request-items-grid").data("kendoGrid").dataSource.data(selectedgridData);
+                                EnableInputs();
+                            }
+                    } else {
+                        selectedgridData[index].InvoiceStatus = 3;
+                        selectedgridData[index].Remark = 'Please check the inputs and try again.';
+                        $("#request-items-grid").data("kendoGrid").dataSource.data(selectedgridData);
+                        //msgBox.show('කරුණාකර යෙදවුම් පරීක්ෂා කර නැවත උත්සාහ කරන්න', 'please check the inputs and try again', 'Warning', 'BU05', 'Warning', null);
+                        EnableInputs();
+                    }
+                });
+
+            });
+            $("#ajaxBusy").hide();
+
+        } else {
+            msgBox.show('කරුණාකර යෙදවුම් පරීක්ෂා කර නැවත උත්සාහ කරන්න', 'please check the inputs and try again', 'Warning', 'BU05', 'Warning', null);
+            EnableInputs();
+        }
+    }
+
+    //Not in use since async function
+    function createInvoiceBulk(index, elements){
+        DisableInputs();
+        var isValid = true; //validateCreateRequest();
+        var selectedgridData = $("#request-items-grid").data("kendoGrid").dataSource.data();
+        if(isValid) {
+            var selectedgridData = $("#request-items-grid").data("kendoGrid").dataSource.data();
+            var tableData = [];
+            
+            tableData.push(elements);
+
+            if (tableData != null && tableData.length > 0) {
+                    var gridData = [];
+                    $.ajax({
+                        url: '@ViewBag.APIURL/BusinessLogics/CreateInvoice',
+                        type: 'POST',
+                        dataType: 'json',
+                        async: false,
+                        data: JSON.stringify(tableData),
+                        contentType: 'application/json; charset=utf-8',
+                        beforeSend: function () {
+                            selectedgridData[index].InvoiceStatus = 2;
+                            $("#request-items-grid").data("kendoGrid").dataSource.data(selectedgridData);
+                        },
+                        complete: function () {
+                        },
+                        success: function (response) {
+                            //console.log("Update Invoice Success Response", response[0].responce[0]);
+                            console.log(response.length);
+                            if(response.length > 0){
+                                if(response[0].saveSuccessfull) {
+                                    //createNewPass.close();
+                                    //resetControlers();
+                                    //msgBox.show('සුරැකීම සාර්ථක..', 'Save successful.', 'Warning', 'BU05', 'Warning', null);
+                                    selectedgridData[index].InvoiceStatus = 1;
+                                    selectedgridData[index].InvoiceNumber = response[0].invoiceNumber;
+                                    $("#request-items-grid").data("kendoGrid").dataSource.data(selectedgridData);
+                                } else {
+                                    selectedgridData[index].InvoiceStatus = 3;
+                                    selectedgridData[index].Remark = (response[0].responce != null ? response[0].responce[0] : '');
+                                    $("#request-items-grid").data("kendoGrid").dataSource.data(selectedgridData);
+                                    //msgBox.show('සුරැකීම අසාර්ථක විය..' + (response[0].responce != null ? response[0].responce[0] : ''), 'Save failed.', 'Warning', 'BU05', 'Warning', null);
+                                }
+                            } else {
+                                
+                                selectedgridData[index].InvoiceStatus = 3;
+                                selectedgridData[index].Remark = 'API Response length is 0';
+                                $("#request-items-grid").data("kendoGrid").dataSource.data(selectedgridData);
+                                //msgBox.show('සුරැකීම අසාර්ථක විය..', 'Save failed.', 'Warning', 'BU05', 'Warning', null);
+                            }
+                            EnableInputs();
+                        },
+                        error: function (jqXHR, textStatus, errorThrown) {
+                            //formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                            msgBox.show('තාක්ෂණ ගැටලුවකි. කරුණාකර තොරතුරු තාක්ෂණ නිලධාරියෙකු අමතන්න.', 'Error jqXHR.status = 0. Please contact a IT helpdesk officer', 'Warning', 'BU05', 'Warning', null);
+                            EnableInputs();
+                        }
+                    });
+                }
+                else {
+                    //msgBox.show('කරුණාකර තෝරාගත් අයිතම පරීක්ෂා කර නැවත උත්සාහ කරන්න', 'Error occcured. Item table data is null. ', 'Warning', 'BU05', 'Warning', null);
+                    selectedgridData[index].InvoiceStatus = 3;
+                    selectedgridData[index].Remark = 'Error occcured. Item table data is null.';
+                    $("#request-items-grid").data("kendoGrid").dataSource.data(selectedgridData);
+                    EnableInputs();
+                }
+        } else {
+            selectedgridData[index].InvoiceStatus = 3;
+            selectedgridData[index].Remark = 'Please check the inputs and try again.';
+            $("#request-items-grid").data("kendoGrid").dataSource.data(selectedgridData);
+            //msgBox.show('කරුණාකර යෙදවුම් පරීක්ෂා කර නැවත උත්සාහ කරන්න', 'please check the inputs and try again', 'Warning', 'BU05', 'Warning', null);
+            EnableInputs();
+        }
+    }
+
+    function createInvoice(elements) {
+        DisableInputs();
+        var isValid = true; //validateCreateRequest();
+        if(isValid) {
+            var selectedgridData = $("#request-items-grid").data("kendoGrid").dataSource.data();
+            var tableData = [];
+            
+            //$.each(selectedgridData, function (index, element) {
+                var tableRowData = {
+                    Status: elements.Status,
+                    Type: elements.Type,
+                    ControlType: elements.REType,
+                    InvoiceNumber: elements.InvoiceNumber,
+                    InvoiceStatus: elements.InvoiceStatus,
+                    ControlId: elements.ControlId,
+                    DEPId: elements.depid,
+                    Seq: elements.Seq,
+                    Approver: elements.Approver,
+                    LocationFrom: elements.LocationFrom,
+                    LocationTo: elements.LocationTo,
+                    DepartmentName: elements.DepartmentName,
+                    Quantity: elements.Quantity,
+                    Remark: elements.Remark,
+                    Address: elements.Address,
+                    CreatedBy: sessionStorage.UserId,
+                    CreatedMachine: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                    ModifiedBy: sessionStorage.UserId,
+                    ModifiedMachine: JSON.parse(sessionStorage.getItem("Clientconfig")).clientId,
+                }
+                //console.log(tableRowData);
+                tableData.push(tableRowData);
+            //});
+
+            if (tableData != null && tableData.length > 0) {
+                    var gridData = [];
+                    $.ajax({
+                        url: '@ViewBag.APIURL/BusinessLogics/CreateInvoice',
+                        type: 'POST',
+                        dataType: 'json',
+                        async: false,
+                        data: JSON.stringify(tableData),
+                        contentType: 'application/json; charset=utf-8',
+                        beforeSend: function () {
+                            $("#ajaxBusy").show();
+                        },
+                        complete: function () {
+                            $("#ajaxBusy").hide();
+                        },
+                        success: function (response) {
+                            //console.log("Update Invoice Success Response", response[0].responce[0]);
+                            console.log(response.length);
+                            if(response.length > 0){
+                                if(response[0].saveSuccessfull) {
+                                    //createNewPass.close();
+                                    //resetControlers();
+                                    msgBox.show('සුරැකීම සාර්ථක..', 'Save successful.', 'Warning', 'BU05', 'Warning', null);
+                                } else {
+                                    msgBox.show('සුරැකීම අසාර්ථක විය..' + (response[0].responce != null ? response[0].responce[0] : ''), 'Save failed.', 'Warning', 'BU05', 'Warning', null);
+                                }
+                            } else {
+                                msgBox.show('සුරැකීම අසාර්ථක විය..', 'Save failed.', 'Warning', 'BU05', 'Warning', null);
+                            }
+                            EnableInputs();
+                        },
+                        error: function (jqXHR, textStatus, errorThrown) {
+                            formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                             EnableInputs();
+                        }
+                    });
+                }
+                else {
+                    msgBox.show('කරුණාකර තෝරාගත් අයිතම පරීක්ෂා කර නැවත උත්සාහ කරන්න', 'Error occcured. Item table data is null. ', 'Warning', 'BU05', 'Warning', null);
+                    EnableInputs();
+                }
+        } else {
+            msgBox.show('කරුණාකර යෙදවුම් පරීක්ෂා කර නැවත උත්සාහ කරන්න', 'please check the inputs and try again', 'Warning', 'BU05', 'Warning', null);
+            EnableInputs();
+        }
+    }
+
+    function cancelRequest() {
+        resetControlers();
+        createNewPass.close();
+    }
+
+    function resetControlers() {
+        var grid1 = $("#request-items-grid").data("kendoGrid");
+        if(grid1 != undefined) {
+            grid1.dataSource.data([]);}
+        var grid2 = $("#add-items-grid-data").data("kendoGrid");
+        if(grid2 != undefined) {
+            grid2.dataSource.data([]);}
+
+        //$("#newRequestTypeFilter").data("kendoDropDownList").select(-1);
+        //$("#departmentTo").data("kendoDropDownList").select(-1);
+        //$("#newLocationToFilter").data("kendoDropDownList").select(-1);
+        //$("#approvers_taglist").data("kendoDropDownList").select(-1);
+        //$("#receiverName").val('');
+        //$("#address").val('');
+        //$("#receiverEmail").val('');
+        //$("#watcherEmail").val('');
+        //$("#courierNo").val('');
+        //$("#gpRemarks").val('');
+        //$("#vehicleNo").val('');
+
+        //$('#open-request-item-window-button').attr("disabled", "disabled");
+        //$('#open-request-expand-window-button').attr("disabled", "disabled");
+        checkedIds = {};
+        EnableInputs();
+    }
+
+    //Add Item window Start
+    function openAddItemWindow() {
+        DisableInputs();
+        $("#DateToFilter").kendoDatePicker({format:"yyyy-MM-dd",min:new Date(1900,0,1,0,0,0,0),max:new Date(2099,11,31,0,0,0,0)});
+        $("#DateFromFilter").kendoDatePicker({format:"yyyy-MM-dd",min:new Date(1900,0,1,0,0,0,0),max:new Date(2099,11,31,0,0,0,0)});
+        $("#DateToFilter").data("kendoDatePicker").value(todayDate);
+
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetFactoryNames',
+            type: 'GET',
+            dataType: 'json',
+            async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                if(response[0] != null) {
+                    $("#ModeFilter").kendoDropDownList({"dataSource": response,filter: "contains","dataTextField": "loc_Description","dataValueField": "loc_Code","optionLabel": "Select a location..."});
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "Invoice");
+            }
+        });
+
+        //Item Grid
+        //For Bag Barcode Detaills loading
+        //DataSource definition
+        var crudServiceBaseUrl = "@ViewBag.APIURL/Lookup",
+            dataSource = new kendo.data.DataSource({
+                batch: true,
+                aggregate: [{ field: "Quantity", aggregate: "sum" }],
+                schema: {
+                    model: {
+                        id: "Key",
+                        fields: {
+                            Key: { type: "string", editable: false },
+                            Status: { editable: false },
+                            InvoiceStatus: { type: "number", editable: false },
+                            InvoiceNumber: { type: "string", editable: false },
+                            ControlId: { type: "string", editable: false },
+                            REType: { type: "string", editable: false },
+                            DEPId: { type: "string", editable: false },
+                            Seq: { editable: false },
+                            Type: { editable: false },
+                            Approver: { type: "string", editable: false },
+                            LocationFrom: { type: "string", editable: false },
+                            LocationTo: { type: "string", editable: false },
+                            Address: { editable: true },
+                            DepartmentName: { type: "string", editable: false },
+                            Quantity: { type: "string", editable: false },
+                            CreatedBy: { type: "string", editable: false },
+                            CreatedOn: { type: "date", editable: false },
+                            Remark: { type: "string", editable: false },
+                        }
+                    }
+                }
+            });
+
+        //Grid definition
+        var grid = $("#add-items-grid-data").kendoGrid({
+            dataSource: dataSource,
+            scrollable: true,
+            resizable: true,
+            filterable: {mode: "row"},
+
+            //define dataBound event handler
+            dataBound: onDataBound,
+            columns:[
+                        { field: "Key", width:"90px", hidden: true },
+                        { title: 'Select All',
+                            headerTemplate: "<input type='checkbox' id='header-chb' class='k-checkbox header-checkbox'><label class='k-checkbox-label' for='header-chb'></label>",
+                            template: function (dataItem) {
+                                return "<input type='checkbox' id='" + dataItem.Key + "-" + dataItem.WfdepinstId + "' class='k-checkbox row-checkbox'><label class='k-checkbox-label' for='" + dataItem.Key + "-" + dataItem.WfdepinstId + "'></label>";
+                            },
+                            width: 35}, 
+                        {title:"Status",field:"Status",width:"290px", filterable: false, template: "#if (Status == '1' ) {# <div class='mb-2 mr-2 badge badge-primary const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Pending Approval" + 
+                        "</div> #} else if (Status == '2'){ # <div class='mb-2 mr-2 badge badge-secondary const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Approved - Not Send" +
+                        "</div> #} else if (Status == '3'){ # <div class='mb-2 mr-2 badge badge-success const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Security Passed" +
+                        "</div> #} else if (Status == '4'){ # <div class='mb-2 mr-2 badge badge-info const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Security Recevied" +
+                        "</div> #} else if (Status == '5'){ # <div class='mb-2 mr-2 badge badge-warning const-width-badge' style='width: 90%; height: 22px; font-size: 18px;'>Closed" +
+                        "</div> #}#" },
+                        {title:"Request No",field:"ControlId",width:"135px",encoded:true},
+                        {title:"Request Type",field:"REType",width:"180px",encoded:true, filterable: false, template: "#if (REType == '100' ) {# <div>Factory Invoice (100)" + 
+                        "</div> #} else if (REType == '200'){ # <div>BFL Invoice (200)" +
+                        "</div> #}#"},
+                        {title:"DEPId",field:"DEPId",width:"140px",encoded:true, hidden:true},
+                        {title:"Seq",field:"Seq",width:"105px",encoded:true, hidden:true},
+                        {title:"Location From",field:"LocationFrom",width:"155px"},
+                        {title:"Approver",field:"Approver",width:"140px",encoded:true},
+                        {title:"Receiver Location",field:"LocationTo",width:"180px",encoded:true, filterable: false},
+                        {title:"Receiver Department",field:"DepartmentName",width:"215px",encoded:true, filterable: false, template: "#if (DepartmentName == '1' ) {# <div>Washing out (Factory)" + 
+                        "</div> #} else if (DepartmentName == '2'){ # <div>Washing in (BFL)" +
+                        "</div> #} else if (DepartmentName == '3'){ # <div>Washing out (BFL)" +
+                        "</div> #} else if (DepartmentName == '4'){ # <div>Washing receive (Factory)" +
+                        "</div> #}#" },
+                        {title:"Quantity",field:"Quantity",width:"112px",encoded:true},
+                        {title:"Created By",field:"CreatedBy",width:"13 5px",encoded:true},
+                        {title:"Created",field:"CreatedOn",width:"133px",filterable:{operators:{date:{gte:"From",lte:"To"}}}},//template: "#= kendo.toString(kendo.parseDate(CreatedOn, 'yyyy-MM-ddhh:mm:ss'), 'MM/dd/yyyy') #"
+                        {title:"Remarks",field:"Remark",width:"200px",encoded:true},   
+                    ],
+            editable: "inline"
+        }).data("kendoGrid");
+
+        //getAddItemData(null,null); //Fill Data to the table
+
+        //bind click event to the checkbox
+        grid.table.on("click", ".row-checkbox", selectRow);
+
+        $('#header-chb').change(function (ev) {
+            $("#ajaxBusy").show();
+            var checked = ev.target.checked;
+            $('.row-checkbox').each(function (idx, item) {
+                if (checked) {
+                    if (!($(item).closest('tr').is('.k-state-selected'))) {
+                        $(item).click();
+                    }
+                } else {
+                    if ($(item).closest('tr').is('.k-state-selected')) {
+                        $(item).click();
+                    }
+                }
+            });
+            
+            $("#ajaxBusy").hide();
+        });
+
+        //Add selected items to request-items-grid
+        $("#item-add-button").bind("click", function () {
+            $("#add-items-grid-data").data("kendoGrid").dataSource.filter({});
+            $("#request-items-grid").data('kendoGrid').dataSource.data([]);
+            $("#error-items-grid").data('kendoGrid').dataSource.data([]);
+            var allGridData = $("#add-items-grid-data").data("kendoGrid").dataSource.data();
+            var grid = $("#add-items-grid-data").data("kendoGrid");
+            var checkedItems = [];
+            var errorReportItems = [];
+            $.each(grid.items(), function (index, item) {
+                if (($(item).hasClass("k-state-selected"))) {
+                    if(allGridData[index].BagStatus == 0) {
+                        errorReportItems.push(allGridData[index]);
+                    } else {
+                        checkedItems.push(allGridData[index]);
+                    }
+                }
+            });
+
+            if(errorReportItems.length != 0) {
+                $("#error-items-grid").data('kendoGrid').dataSource.data(errorReportItems);
+                openErrorTable();
+            }
+
+            $("#request-items-grid").data('kendoGrid').dataSource.data(checkedItems);
+            addItemsGrid.close();
+        });
+
+        $("#cancel-button").bind("click", function () {
+            $("#request-items-grid").data('kendoGrid').dataSource.data([]);
+            checkedIds = {};
+            addItemsGrid.close();
+            $("#header-chb")[0].checked = false;
+        });
+        //End of Item Grid
+
+        addItemsGrid = $("#add-items-grid").kendoWindow({
+            width: "90%",
+            title: "Add Items",
+            visible: false,
+            actions: ["Close"],
+            modal: true,
+            resizable: true,
+            draggable: true,
+            pinned: true,
+        }).data("kendoWindow");
+
+        var arrows = [38, 40];
+        addItemsGrid.open().center();
+        EnableInputs();
+    }
+
+    //Open Expand Table Window
+    function openErrorTable() {
+        errorTableWindow = $("#errorWindow").kendoWindow({
+            width: "90%",
+            height: "80%",
+            title: "Error Report",
+            visible: false,
+            actions: ["Close"],
+            modal: true,
+            resizable: true,
+            draggable: true,
+            pinned: true,
+        }).data("kendoWindow");
+
+        var arrows = [38, 40];
+        errorTableWindow.open().center();
+        EnableInputs();
+    }
+
+    //Open Expand Table Window
+    function openExandTable() {
+        
+        var additemtabledatat = $("#request-items-grid").data('kendoGrid').dataSource.data();
+
+        if(additemtabledatat != null) {
+            var gridData = [];
+            $.each(additemtabledatat, function (index, elements) {
+                        var object = {
+                            Key: elements.LocationFrom,
+                            Status: elements.Status,
+                            Type: elements.Type,
+                            REType: elements.REType,
+                            InvoiceNumber: elements.InvoiceNumber,
+                            InvoiceStatus: elements.InvoiceStatus,
+                            ControlId: elements.ControlId,
+                            DEPId: elements.DEPId,
+                            Seq: elements.Seq,
+                            Approver: elements.Approver,
+                            LocationFrom: elements.LocationFrom,
+                            LocationTo: elements.LocationTo,
+                            DepartmentName: elements.DepartmentName,
+                            CreatedBy: elements.CreatedBy,
+                            CreatedOn: formatDate(elements.CreatedOn), //$.datepicker.formatDate('dd-mm-yy', new Date(elements.txnDateTime)),
+                            Quantity: elements.Quantity,
+                            Remark: elements.Remark,
+                            Address: elements.Address,
+                        }
+                        gridData.push(object);
+                        //EnableInputs();
+                    });
+                console.log(gridData);
+                $("#expand-items-grid").data('kendoGrid').dataSource.data(gridData);
+        }
+
+
+        expandedTableWindow = $("#expandedWindow").kendoWindow({
+            width: "90%",
+            height: "80%",
+            title: "Expand",
+            visible: false,
+            actions: ["Close"],
+            modal: true,
+            resizable: true,
+            draggable: true,
+            pinned: true,
+        }).data("kendoWindow");
+
+        var arrows = [38, 40];
+        expandedTableWindow.open().center();
+        EnableInputs();
+    }
+
+    //on click of the checkbox:
+    function selectRow() {
+        DisableInputs();
+        var checked = this.checked,
+        row = $(this).closest("tr"),
+        grid = $("#add-items-grid-data").data("kendoGrid"),
+        dataItem = grid.dataItem(row);
+        
+        checkedIds[dataItem.id] = checked;
+        
+        if (checked) {
+            //-select the row
+            row.addClass("k-state-selected");
+
+            var checkHeader = true;
+
+            $.each(grid.items(), function (index, item) {
+                if (!($(item).hasClass("k-state-selected"))) {
+                    checkHeader = false;
+                }
+            });
+
+            $("#header-chb")[0].checked = checkHeader;
+        } else {
+            //-remove selection
+            row.removeClass("k-state-selected");
+            $("#header-chb")[0].checked = false;
+        }
+        EnableInputs();
+    }
+
+    //on dataBound event restore previous selected rows:
+    function onDataBound(e) {
+        var dataItems = this.dataSource.view();
+        for (var i = 0; i < dataItems.length; i++) {
+            
+            if (dataItems[i].get("BagStatus") == 0) {
+                e.sender.tbody.find("[data-uid='" + dataItems[i].uid + "']").addClass("unpre");
+            } else {
+                e.sender.tbody.find("[data-uid='" + dataItems[i].uid + "']").addClass("pre");
+            }
+
+            if (checkedIds[dataItems[i].id]) {
+                this.tbody.find("tr[data-uid='" + dataItems[i].uid + "']")
+                    .addClass("k-state-selected")
+                    .find(".k-checkbox")
+                    .attr("checked", "checked");
+            }
+        }
+    }
+
+    function searchForBagData() {
+        var todate = null;
+        var fromdate = null;
+        var month = $("#MonthFilter").val();
+        if(month == "year-month"){
+            todate = $("#DateToFilter").val();
+            if (todate != "") {
+                todate + "%2023:59:59";
+            } else {
+                todate = "0001-01-01%2023:59:59";
+            }
+
+            fromdate = $("#DateFromFilter").val();
+            if (fromdate != "") {
+                fromdate + "%2000:00:00";
+            } else {
+                fromdate = "0001-01-01%2000:00:00";
+            }
+        } else {
+            //var mo = parseInt(month.split("-",2)[1]) == 12 ? 1 : (parseInt(month.split("-",2)[1]) + 1);
+            todate = todate = month + "-" + new Date(parseInt(month.split("-",2)[0]),parseInt(month.split("-",2)[1]) == 12 ? 1 : (parseInt(month.split("-",2)[1])),0).getDate() + "%2000:00:00";//month.split("-",2)[0] + "-" + (mo < 10 ? ("0" + mo.toString()) : mo.toString()) + "-01%2000:00:00"
+            fromdate = month + "-01%2000:00:00";
+        }
+        getAddItemData(fromdate, todate);
+    }
+
+    function getAddItemData(fromdate, todate) {
+        DisableInputs();
+        //console.log(JSON.parse(sessionStorage.getItem("Clientconfig")).wfId);
+        $("#add-items-grid-data").data('kendoGrid').dataSource.data([]);
+        if(fromdate == null) {
+            fromdate = "2000-01-01%2000:00:00";   
+        }
+        if(todate == null) {
+            todate = "4444-01-01%2000:00:00";
+        }
+        
+        var mode = $("#ModeFilter").val();
+        
+        var gridData = [];
+        $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetInvoiceDispatchDetails?fromdate=' + fromdate + '&todate=' + todate + '&invoiceStatus=' + 0 + '&faccode=' + mode,
+                type: 'GET',
+                dataType: 'json',
+                //async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                    EnableInputs();
+                },
+                success: function (response) {
+                    //console.log(response);
+                    if(response.length != 0) {
+                        $.each(response, function (index, elements) {
+                            var object = {
+                                Key: elements.controlId + "|" + elements.seq,
+                                Status: elements.txnStatus,
+                                Type: elements.controlType,
+                                REType: elements.controlType,
+                                InvoiceNumber: elements.invoiceNumber,
+                                InvoiceStatus: elements.invoiceStatus,
+                                ControlId: elements.controlId,
+                                DEPId: elements.depid,
+                                Seq: elements.seq,
+                                Approver: elements.approver,
+                                LocationFrom: elements.locFromCode,
+                                LocationTo: elements.locName,
+                                DepartmentName: elements.depid,
+                                CreatedBy: elements.created,
+                                CreatedOn: formatDate(elements.createdDateTime), //$.datepicker.formatDate('dd-mm-yy', new Date(elements.txnDateTime)),
+                                Quantity: elements.qty01,
+                                Remark: elements.remark,
+                                Address: elements.locAddress,
+                            }
+                            gridData.push(object);
+                        });
+
+                        $("#add-items-grid-data").data('kendoGrid').dataSource.data(gridData);
+                    }
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                    EnableInputs();
+                }
+            });
+    }
+    //End of Add Item
+
+    //Update Status 
+    function openUpdateStatusWindow() {
+        DisableInputs();
+        if(rowDataItem != null) {
+            updateStatus = null;
+            //console.log(rowDataItem);
+            $("#RequestId").html(rowDataItem.ControlId);
+            $("#Seq").html(rowDataItem.Seq);
+            $("#DepartmentId").html(rowDataItem.DEPId);
+            $("#Department").html(rowDataItem.DepartmentName == 1 ? 'Washing out (Factory)' : rowDataItem.DepartmentName == 2 ? 'Washing in (BFL)' : rowDataItem.DepartmentName == 3 ? 'Washing out (BFL)' : '"Washing receive (Factory)');
+            
+            //Item Grid
+            //For Bag Barcode Detaills loading
+            $("#request-status-grid").kendoGrid({
+                dataSource: {
+                    schema: {
+                        model: {
+                            fields: {
+                                Stage: { type: "string", editable: false },
+                                Status: { type: "string", editable: false },
+                                Comments: { type: "string", editable: false },
+                                Completed_By: { type: "string", editable: false },
+                                Completed_On: { type: "date", editable: false },
+                                Action: { type: "string", editable: false },
+                            },
+                        }
+                    },
+                    batch: true,
+                },
+                scrollable: true,        
+                sortable: false,
+                filterable: false,
+                columns:[
+                            {title:"Stage",field:"Stage",width:"145px"},
+                            {title:"Status",field:"Status",width:"105px",encoded:true},
+                            {title:"Comments",field:"Comments",width:"105px",encoded:true, hidden:true},
+                            {title:"Completed_By",field:"Completed_By",width:"105px"},
+                            {title:"Completed_On",field:"Completed_On",width:"105px",encoded:true, format:"{0:dd-MM-yyyy hh:mm:ss}",filterable:{operators:{date:{gte:"From",lte:"To"}}}},
+                            {title:"Action",field:"Action",width:"140px",encoded:true, template: "#if (Action == '1' ) {# <div><button id='filterGatePassRequestButton' class='k-button' style='width: 180px;'' onclick='UpdateRequestStatus()'><span class='k-icon k-i-check-outline' style='margin-right: 7px; text-align:left;'></span><span>Update</span></button>" + 
+                            "</div> #} else if (Action == '2'){ # <div>Completed" +
+                            "</div> #} else if (Action == '3'){ # <div>Pending" +
+                            "</div> #} else if (Action == '4'){ # <div>In-Progress" +
+                            "</div> #}#" },
+                        ],
+            });
+            //DataSource definition
+            
+            //End of Item Grid
+
+            updateStatus = $("#updateStatus").kendoWindow({
+                width: "75%",
+                title: "Update Status",
+                visible: false,
+                actions: ["Close"],
+                modal: true,
+                resizable: true,
+                draggable: true,
+                pinned: true,
+            }).data("kendoWindow");
+
+            getRequestData();
+            var arrows = [38, 40];
+            updateStatus.open().center();
+        }
+        EnableInputs();
+    }
+
+    function getRequestData() {
+        DisableInputs();
+        $("#request-status-grid").data('kendoGrid').dataSource.data([]);
+       
+        var gridData = [];
+        $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetRequestyDetails?controlid=' + rowDataItem.ControlId + '&seq=' + rowDataItem.Seq + '&depid=' + rowDataItem.DEPId,
+                type: 'GET',
+                dataType: 'json',
+                async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {
+                    //console.log(response);
+                    //Action 
+                    //1 = on event
+                    //2 = Completed
+                    //3 = pending
+                    //4 = in-progress
+                    if(response != null) {
+                        $("#currentStatus").html(response.txnStatus + 1);
+                        $("#approverid").html(response.approver);
+                        var object = {
+                                Stage: "Start of a request",
+                                Status: response.txnStatus >= 1 ? "Approved" : response.txnStatus < 1 ? "Pending" : "",
+                                Comments: "",
+                                Completed_By: response.createdBy,
+                                Completed_On: formatDate(response.createdDateTime),
+                                Action: response.txnStatus >= 1 ? 2 : 3,
+                            }
+                            gridData.push(object);
+
+                            object = {
+                                Stage: "First Level Approval",
+                                Status: response.txnStatus >= 2 ? "Approved" : response.txnStatus < 2 ? "Pending" : "",
+                                Comments: "",
+                                Completed_By: response.approvalStatus == 0 ? "" : response.approver,
+                                Completed_On: formatDate(response.approvedDateTime),
+                                Action: response.txnStatus >= 2 ? 2 : response.txnStatus == 1 ? 1 : 3,
+                            }
+                            gridData.push(object);
+
+                            object = {
+                                Stage: "Sending Factory Security",
+                                Status: response.txnStatus >= 3 ? "Approved" : response.txnStatus < 3 ? "Pending" : "",
+                                Comments: "",
+                                Completed_By: response.securityPassedBy,
+                                Completed_On: formatDate(response.securityPassedDateTime),
+                                Action: response.txnStatus >= 3 ? 2 : response.txnStatus == 2 ? 1 : 3,
+                            }
+                            gridData.push(object);
+
+                            object = {
+                                Stage: "Receiving Factory Security",
+                                Status: response.txnStatus >= 4 ? "Approved" : response.txnStatus < 4 ? "Pending" : "",
+                                Comments: "",
+                                Completed_By: response.securityReceivedBy,
+                                Completed_On: formatDate(response.securityReceivedDateTime),
+                                Action: response.txnStatus >= 4 ? 2 : response.txnStatus == 3 ? 1 : 3,
+                            }
+                            gridData.push(object);
+
+                            object = {
+                                Stage: "Closed",
+                                Status: response.txnStatus >= 5 ? "Approved" : response.txnStatus < 5 ? "Pending" : "",
+                                Comments: "",
+                                Completed_By: response.closedBy,
+                                Completed_On: formatDate(response.closedDateTime),
+                                Action: response.txnStatus >= 5 ? 2 : response.txnStatus == 4 ? 4 : 3,
+                            }
+                            gridData.push(object);
+
+                        //console.log(gridData);
+                        $("#request-status-grid").data('kendoGrid').dataSource.data(gridData);
+                        EnableInputs();
+                    }
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                    EnableInputs();
+                }
+        });
+    }
+
+    //Invoice Parameters
+    function openInvoiceParameters() {
+        //msgBox.show('under maintenance sorry.' , '', 'Warning', 'BU05', 'Warning', null);
+        manageParametrs = $("#managePrametersWindow").kendoWindow({
+            width: "73%",
+            height: "54%",
+            title: "Manage Parameters",
+            visible: false,
+            actions: ["Close"],
+            modal: true,
+            resizable: true,
+            draggable: true,
+            pinned: true,
+        }).data("kendoWindow");
+
+        refreshParameterGrid();
+
+        var arrows = [48, 40];
+        manageParametrs.open().center();
+    }
+
+    function refreshParameterGrid() {
+        $("#manage-parameters-grid").data('kendoGrid').dataSource.data([]);
+        $.ajax({
+                url: "@ViewBag.APIURL/Lookup/GetInvoiceParameters",
+                type: 'GET',
+                dataType: 'json',
+                //async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {
+                    //console.log(response);
+                    if(response.length != 0){
+                        gridData = [];
+                        $.each(response, function (index, elements) {
+                            var object = {
+                                Mode: 0,
+                                InvoiceKey: elements.invoiceKey,
+                                NextInvoiceNo: elements.nextInvoiceNo,
+                                VAT: elements.vat,
+                                NBT: elements.nbt,
+                                ExchangeRate: elements.exchangeRate,
+                                EffectiveDateFrom: (new Date(elements.effectiveDateFrom)).toLocaleDateString("en-US",{ month: '2-digit', day: '2-digit', year: 'numeric'}),
+                                EffectiveDateTo: (new Date(elements.effectiveDateTo)).toLocaleDateString("en-US",{ month: '2-digit', day: '2-digit', year: 'numeric'}),
+                                ModifiedDateTime: (new Date(elements.modifiedDateTime)).toLocaleDateString("en-US",{ month: '2-digit', day: '2-digit', year: 'numeric'}),
+                                ModifiedBy: elements.modifiedBy
+                            }
+                            gridData.push(object);
+                            //console.log("row data :", object);
+                        });
+                        $("#manage-parameters-grid").data('kendoGrid').dataSource.data(gridData);
+                    } else {
+
+                    }
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                }
+            });
+    }
+
+    //Start info Window//
+    function openInfoWindow() {
+        DisableInputs();
+        //console.log(rowDataItem);
+        //showInfo = null;
+
+        if($("#read-only-request-items-grid").html() == '') {
+            $("#read-only-request-items-grid").kendoGrid({
+                dataSource: {
+                    schema: {
+                        model: {
+                            id: "BagBarcode",
+                            fields: {
+                                ColorCode: { type: "number", editable: false },
+                                Key: { type: "string", editable: false },
+                                Seq: { type: "number", editable: false },
+                                TxnMode: { type: "number", editable: false },
+                                L1id: { type: "number", editable: false },
+                                Style: { type: "string", editable: false },
+                                L2id: { type: "number", editable: false },
+                                Shedule: { type: "string", editable: false },
+                                PO: { type: "string", editable: false },
+                                ZFeature: { type: "string", editable: false },
+                                L4id: { type: "number", editable: false },
+                                Color: { type: "string", editable: false },
+                                BagBarcode: { type: "string", editable: false },
+                                Quantity: { type: "number", editable: false },
+                                Action: { type: "number", editable: false },
+                                Location: { type: "string", editable: false },
+                            },
+                        }
+                    },
+                    batch: true,
+                    group: {
+                        field: "Key", aggregates: [
+                            { field: "Style", aggregate: "count" },
+                            { field: "Quantity", aggregate: "sum"},
+                            { field: "Key", aggregate: "count" }
+                        ]
+                    },
+                    aggregate: [ { field: "Style", aggregate: "count" },
+                                    { field: "Quantity", aggregate: "sum" },
+                                    { field: "Key", aggregate: "min" },
+                                    { field: "Key", aggregate: "max" }]
+                },
+                scrollable: false,      
+                sortable: false,
+                filterable: false,
+                columns:[
+                            {field:"Key",width:"125px", hidden: true , aggregates: ["count"], groupHeaderTemplate: "#= value # (Count: #= count#)" },
+                            {title:"Seq",field:"Seq",width:"145px",hidden:true},
+                            {title:"TxnMode",field:"TxnMode",width:"145px",hidden:true},
+                            {field:"ColorCode",width:"125px", hidden: true},
+                            {title:"Style",field:"Style",width:"125px", aggregates: ["count"]},
+                            {title:"Shedule",field:"Shedule",width:"125px"},
+                            {title:"PO",field:"PO",width:"125px"},
+                            {title:"Z-Feature",field:"ZFeature",width:"145px"},
+                            {title:"Color Name",field:"Color",width:"205px"},
+                            {title:"Barcode",field:"BagBarcode",width:"145px", footerTemplate: "Total", groupFooterTemplate: "Sub Total"},
+                            {title:"Quantity",field:"Quantity",width:"105px", aggregates: ["sum"], groupFooterTemplate: "#=sum#", footerTemplate: "#=sum#"},
+                            {title:"GRN Status",field:"Action",width:"200px",encoded:true, template: "#if (Action == '0' ) {# <div class='mb-2 mr-2 badge badge-primary grn-status-badge'>Confirmation Pending" + 
+                            "</div> #} else if (Action == '1'){ # <div class='mb-2 mr-2 badge badge-secondary grn-status-badge'>Confirmed" +
+                            "</div> #}#" },
+                            {title:"Location",field:"Location",width:"100px"},
+                        ],
+            });
+        }
+        if($("#request-status").html() == '') {
+            $("#request-status").kendoGrid({
+                dataSource: {
+                    schema: {
+                        model: {
+                            fields: {
+                                Stage: { type: "string", editable: false },
+                                Status: { type: "string", editable: false },
+                                Comments: { type: "string", editable: false },
+                                Completed_By: { type: "string", editable: false },
+                                Completed_On: { type: "date", editable: false },
+                            },
+                        }
+                    },
+                    batch: true,
+                },
+                scrollable: true,        
+                sortable: false,
+                filterable: false,
+                columns:[
+                            {title:"Stage",field:"Stage",width:"145px"},
+                            {title:"Status",field:"Status",width:"105px",encoded:true},
+                            {title:"Comments",field:"Comments",width:"105px",encoded:true, hidden:true},
+                            {title:"Completed_By",field:"Completed_By",width:"105px"},
+                            {title:"Completed_On",field:"Completed_On",width:"105px",encoded:true, format:"{0:dd-MM-yyyy hh:mm:ss}",filterable:{operators:{date:{gte:"From",lte:"To"}}}},
+                        ],
+            });
+        }
+
+        $("#RequestId").html(rowDataItem.ControlId);
+
+        SearchGatepass(rowDataItem.ControlId);
+        //End of Status Grid
+
+        showInfo = $("#infowindow").kendoWindow({
+            width: "80%",
+            height: "75%",
+            title: "Info",
+            visible: false,
+            actions: ["Close"],
+            modal: true,
+            resizable: true,
+            draggable: true,
+            pinned: true,
+        }).data("kendoWindow");
+
+        //getInfotData();
+        var arrows = [48, 40];
+        showInfo.open().center();
+        EnableInputs();
+    }
+    
+    function getInfotData() {
+        DisableInputs();
+        //$("#read-only-request-items-grid").data('kendoGrid').dataSource.data([]);
+       
+        var gridData = [];
+        $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetRequestyDetails?controlid=' + rowDataItem.ControlId + '&seq=' + rowDataItem.Seq + '&depid=' + rowDataItem.DEPId,
+                type: 'GET',
+                dataType: 'json',
+                async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {
+                    //console.log(response);
+                    $("#typeinfo").html(response.controlType == 100 ? 'Factory Invoice (100)' : 'BFL Invoice (200)');
+                    $("#statusinfo").html(response.txnStatus == 1 ? 'Pending Approval' : response.txnStatus == 2 ? 'Approved - Not Send' : response.txnStatus == 3 ? 'Security Passed' : response.txnStatus == 4 ? 'Security Recieved' : 'Closed');
+                    $("#location-from").html(response.locCodeFrom);
+                    $("#location-to").html(response.locCode);
+                    $("#addressinfo").html('');
+                    $("#createdon").html(response.txnDateTime);
+                    $("#receiver").html(response.receiverName);
+                    $("#receiveremail").html(response.receiverEmail);
+                    $("#watcheremail").html(response.watcherEmail);
+                    $("#remarks").html(response.remark);
+                    EnableInputs();
+
+                    //$("#read-only-request-items-grid").data('kendoGrid').dataSource.data(gridData);
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                    EnableInputs();
+                }
+        });
+    }
+
+    function loadAllGroupBarcodeinRequest(g) {
+        DisableInputs();
+        var gridData = [];
+        $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetGroupBarcodeDetails?controlId=' + rowDataItem.ControlId + '&seq=' + rowDataItem.Seq,
+                type: 'GET',
+                dataType: 'json',
+                async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },  
+                success: function (response) {
+                    //console.log(response);
+                    $.each(response, function (index, elements) {
+                        var object = {
+                            Seq: elements.seq,
+                            BagBarcode: elements.bagBarCode,
+                            TxnMode: elements.txnMode,
+                            L1id: elements.styleId,
+                            Style: elements.styleDesc,
+                            L2id: elements.scheduleId,
+                            Shedule: elements.scheduleDesc,
+                            PO: elements.poNo,
+                            ZFeature: elements.zfeature,
+                            L4id: elements.colorId,
+                            Color: elements.colorDesc,
+                            Quantity: elements.qty01,
+                            Action: elements.bagStatus,
+                        }
+                        gridData.push(object);
+                    });
+                    //console.log(gridData);
+                    $(g).data('kendoGrid').dataSource.data(gridData);
+                    dispatchitemdatafilter("#bag-items-grid");
+                    EnableInputs();
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                    EnableInputs();
+                }
+        });
+    }
+
+    function SearchGatepass(invoiceNumber) {
+        DisableInputs();
+        //console.log(invoiceNumber);
+        var timenow = event.timeStamp;
+        var gridData = [];
+        if(invoiceNumber != "") {
+            $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetRequestHeaderDetails?controlid=' + invoiceNumber,
+                type: 'GET',
+                async: false,
+                contentType: 'application/json; charset=utf-8',
+                data: {
+                    invoiceNumber: invoiceNumber
+                },
+                success: function (result) {
+                    //console.log(result);
+                    if(result != null && result != "") {
+                        $("#type-text").html(result.controlType == 100 ? "Factory Invoice (100)" : "BFL Invoice (200)");
+                        $("#status-text").html(result.txnStatus == 1 ? "Pending Approval" : result.txnStatus == 2 ? "Approved - Not Send" : result.txnStatus == 3 ? "Security Passed" : result.txnStatus == 5 ? "Closed" : "");
+                        $("#locationfrom-text").html(result.locFromCode);
+                        $("#locationto-text").html(result.locName);
+                        $("#department-text").html(result.depid == 1 ? "Washing out (Factory)" : result.depid == 2 ? "Washing in (BFL)" : result.depid == 3 ? "Washing out (BFL)" : result.depid == 4 ? "Washing receive (Factory)" : "");
+                        $("#address-text").html(result.locAddress);
+                        $("#approval-text").html(result.approver + (result.txnStatus < 2 ? " (pending)" : " (approved)"));
+                        $("#createdon-text").html(formatDate(result.createdDateTime));
+                        $("#requestby-text").html(result.createdBy);
+                        $("#receiver-text").html(result.receiverName);
+                        $("#receiveremail-text").html(result.receiverEmail);
+                        $("#watcheremail-text").html(result.watcherEmail);
+                        $("#referenceno-text").html(result.errorCode);
+                        $("#veficle-text").html(result.vehicleNo);
+                        $("#remarks-text").html(result.remark);
+
+                        //Request Item Grid Data
+                        $("#read-only-request-items-grid").data('kendoGrid').dataSource.data([]);
+                        var gridData1 = [];
+                        $.ajax({
+                                url: '@ViewBag.APIURL/Lookup/GetGroupBarcodeDetails?controlId=' + invoiceNumber + '&seq=' + result.seq,
+                                type: 'GET',
+                                dataType: 'json',
+                                async: false,
+                                contentType: 'application/json',
+                                beforeSend: function () {
+                                    $("#ajaxBusy").show();
+                                },
+                                complete: function () {
+                                    $("#ajaxBusy").hide();
+                                },  
+                                success: function (response) {
+                                    //console.log(response);
+                                    $.each(response, function (index, elements) {
+                                        var object = {
+                                            ColorCode: '',
+                                            Key: elements.styleDesc + " | " + elements.scheduleDesc + " | " + elements.colorDesc,
+                                            Seq: elements.seq,
+                                            TxnMode: elements.txnMode,
+                                            L1id: elements.styleId,
+                                            Style: elements.styleDesc,
+                                            L2id: elements.scheduleId,
+                                            Shedule: elements.scheduleDesc,
+                                            PO: elements.poNo,
+                                            ZFeature: elements.zfeature,
+                                            L4id: elements.colorId,
+                                            Color: elements.colorDesc,
+                                            BagBarcode: elements.bagBarCode,
+                                            Quantity: elements.qty01,
+                                            Action: elements.bagStatus,
+                                            Location: elements.location,
+                                        }
+                                        gridData1.push(object);
+                                    });
+                                    //console.log(gridData1);
+                                    $("#read-only-request-items-grid").data('kendoGrid').dataSource.data(gridData1);
+                                },
+                                error: function (jqXHR, textStatus, errorThrown) {
+                                    formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                                    EnableInputs();
+                                }
+                        });
+
+                        //Status Grid Data
+                        //$("#request-status").data('kendoGrid').dataSource.data([]);
+                        var gridData2 = [];
+                        $.ajax({
+                            url: '@ViewBag.APIURL/Lookup/GetRequestyDetails?controlid=' + invoiceNumber + '&seq=' + result.seq + '&depid=' + result.depid,
+                            type: 'GET',
+                            dataType: 'json',
+                            async: false,
+                            contentType: 'application/json',
+                            beforeSend: function () {
+                                $("#ajaxBusy").show();
+                            },
+                            complete: function () {
+                                $("#ajaxBusy").hide();
+                            },
+                            success: function (response) {
+                                //console.log(response);
+                                $("#currentStatus").html(response.txnStatus + 1);
+                                $("#approverid").html(response.approver);
+                                var object = {
+                                        Stage: "Start of a request",
+                                        Status: response.txnStatus >= 1 ? "Approved" : response.txnStatus < 1 ? "Pending" : "",
+                                        Comments: "",
+                                        Completed_By: response.createdBy,
+                                        Completed_On: formatDate(response.createdDateTime),
+                                    }
+                                    gridData2.push(object);
+
+                                    object = {
+                                        Stage: "First Level Approval",
+                                        Status: response.txnStatus >= 2 ? "Approved" : response.txnStatus < 2 ? "Pending" : "",
+                                        Comments: "",
+                                        Completed_By: response.approvalStatus == 0 ? "" : response.approver,
+                                        Completed_On: formatDate(response.approvedDateTime),
+                                    }
+                                    gridData2.push(object);
+
+                                    object = {
+                                        Stage: "Sending Factory Security",
+                                        Status: response.txnStatus >= 3 ? "Approved" : response.txnStatus < 3 ? "Pending" : "",
+                                        Comments: "",
+                                        Completed_By: response.securityPassedBy,
+                                        Completed_On: formatDate(response.securityPassedDateTime),
+                                    }
+                                    gridData2.push(object);
+
+                                    object = {
+                                        Stage: "Receiving Factory Security",
+                                        Status: response.txnStatus >= 4 ? "Approved" : response.txnStatus < 4 ? "Pending" : "",
+                                        Comments: "",
+                                        Completed_By: response.securityReceivedBy,
+                                        Completed_On: formatDate(response.securityReceivedDateTime),
+                                    }
+                                    gridData2.push(object);
+
+                                    object = {
+                                        Stage: "Closed",
+                                        Status: response.txnStatus >= 5 ? "Approved" : response.txnStatus < 5 ? "Pending" : "",
+                                        Comments: "",
+                                        Completed_By: response.closedBy,
+                                        Completed_On: formatDate(response.closedDateTime),
+                                    }
+                                    gridData2.push(object);
+
+                                //console.log(gridData2);
+                                $("#request-status").data('kendoGrid').dataSource.data(gridData2);
+                            },
+                            error: function (jqXHR, textStatus, errorThrown) {
+                                formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                                EnableInputs();
+                            }
+                        });  
+                    }
+                    EnableInputs();
+                },
+                error: function () {
+                    $("#search-result-grid-gatepass").html('No Results found !!!');
+                    EnableInputs();
+                    FocusRequestNoTextBox();
+                }
+            });
+
+            //Request Status Grid
+                                                                   
+        } else {
+            msgBox.show('කරුණාකර යැවීමේ සටහන් අංකයක් තෝරා නැවත උත්සාහ කරන්න.', 'please select a request id and try again.', 'අවවාදයයි / Warning', 'BS01', 'Warning');
+            EnableInputs();
+        }
+    }
+
+    function FocusRequestNoTextBox() {
+        $("#RequestIdFilter").select();
+    }
+    //End Info Window//
+
+    //Checkers
+    function isNumeric(n) {
+          return !isNaN(parseFloat(n)) && isFinite(n);
+    }
+
+    function getBoolean(str) {
+        if("true".startsWith(str)){
+            return true;
+        } else if("false".startsWith(str)){
+            return false;
+        } else {
+            return null;
+        }          
+    }
+    //End of Checkers
+
+    //Print Controllers
+    function openPrintWindow() {
+        DisableInputs();
+        //Print Page Contrrolers
+        if(rowDataItem != null) {
+            printpdfwindow = null;
+            
+            $("#paper").kendoDropDownList({
+                change: function () {
+                $(".pdf-page")
+                    .removeClass("size-a4")
+                    .removeClass("size-letter")
+                    .removeClass("size-executive")
+                    .addClass(this.value());
+                }
+            });
+
+            if($("#item-grid-print").html() == '') {
+                $("#item-grid-print").kendoGrid({
+                    dataSource: {
+                        schema: {
+                            model: {
+                                id: "CustomerPO",
+                                fields: {
+                                    ItemName: { type: "number", editable: false },
+                                    CustomerPO: { type: "string", editable: false },
+                                    GatePass: { type: "string", editable: false },
+                                    Barcode: { type: "string", editable: false },
+                                    Quantity: { type: "number", editable: false },
+                                    Rate: { type: "number", editable: false },
+                                    InvoiceValue: { type: "number", editable: false },
+                                    Remarks: { type: "string", editable: false }
+                                },
+                            }
+                        },
+                        batch: true,
+                        //group: {
+                          //  field: "CustomerPO", aggregates: [{ field: "Quantity", aggregate: "sum"}, { field: "InvoiceValue", aggregate: "sum"}]
+                        //},
+                        aggregate: [{ field: "Quantity", aggregate: "sum" }, { field: "InvoiceValue", aggregate: "sum"}]
+                    },
+                    scrollable: false,      
+                    sortable: false,
+                    filterable: false,
+                    columns:[
+                                {title:"Item Name",field:"ItemName",width:"110px"},
+                                {title:"Customer PO",field:"CustomerPO",width:"80px"},
+                                {title:"GatePass",field:"GatePass",width:"90px"},
+                                {title:"Barcode",field:"Barcode",width:"90px"},
+                                {title:"Quantity",field:"Quantity",width:"45px", aggregates: ["sum"], groupFooterTemplate: "#=sum#", footerTemplate: "#=sum#"},
+                                {title:"Rate",field:"Rate",width:"39px"},
+                                {title:"Invoice Value",field:"InvoiceValue",width:"50px", format:"{0:c2}", aggregates: ["sum"], groupFooterTemplate: "#=kendo.toString(sum, 'C')#", footerTemplate: "#=kendo.toString(sum, 'C')#"},
+                                {title:"Remarks",field:"Remarks",width:"40px"},
+                            ],
+                });
+            }
+
+            SearchGatepassPrint(rowDataItem.InvoiceNumber);
+
+            printpdfwindow = $("#printpdf").kendoWindow({
+                        height: "75%",
+                        title: "Print Invoice",
+                        visible: false,
+                        actions: ["Close"],
+                        scrollable: true,
+                        modal: true,
+                        resizable: true,
+                        draggable: true,
+                        pinned: true,
+                    }).data("kendoWindow");
+
+                var arrows = [38, 40];
+                printpdfwindow.open().center(); 
+        }
+        EnableInputs();
+    }
+
+    function SearchGatepassPrint(invoiceNumber) {
+        DisableInputs();
+        var timenow = event.timeStamp;
+        var gridData = [];
+        if(invoiceNumber != "") {
+            $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetInvoiceHeaderDetails?invoiceid=' + invoiceNumber,
+                type: 'GET',
+                async: false,
+                contentType: 'application/json; charset=utf-8',
+                data: {
+                    invoiceNumber: invoiceNumber
+                },
+                success: function (result) {
+                    console.log(result);
+                    if(result != null && result != "") {
+                        $("#bill-to-text").html(": " + result.billTo);
+                        $("#bill-from-text").html(": " + result.billFrom);
+                        $("#vat-no-to-text").html(": " + result.vatNoTo);
+                        $("#vat-no-from-text").html(": " + result.vatNoFrom);
+                        $("#svat-no-to-text").html(": " + result.svatNoTo);
+                        $("#svat-no-from-text").html(": " + result.svatNoFrom);
+                        $("#printed-on-text").html(": " + (new Date()).toLocaleDateString("en-US", { month: '2-digit', day: '2-digit', year: 'numeric'}));
+                        $("#atten-text").html(": " + result.atten);
+                        $("#tel-no-from").html(": " + result.telNo);
+                        $("#Invoice-to-text").html(": " + result.dispatchTo);
+                        $("#invoice-text").html(": " + result.invoiceNo);
+                        $("#order-no-text").html(": " + '');
+                        $("#delivery-no-text").html(": " + '');
+                        $("#delivery-date-text").html(": " + result.createdDateTime);
+                        
+                        $("#NBT-text").html((result.nbt * 100) + "%");
+                        $("#value-added-tax-text").html(result.valueAddedTaxInUSD);//result.);
+                        $("#total-invoice-text").html(result.totalInvoiceVal);
+                        $("#exchange-rate-text").html(result.exchangeRate);
+                        $("#vat-label-text").html("VAT " + (result.vat * 100) + "% In LKR");
+                        $("#vat-lkr-text").html(result.vatinLKR);
+                        $("#total-suspended-text").html(result.vatSuspendinLKR);
+
+                        //Invoice Item Grid Data
+                        $("#item-grid-print").data('kendoGrid').dataSource.data([]);
+                        var gridData1 = [];
+                        $.ajax({
+                                url: '@ViewBag.APIURL/Lookup/GetInvoiceItemDetails?invoiceid=' + invoiceNumber,
+                                type: 'GET',
+                                dataType: 'json',
+                                async: false,
+                                contentType: 'application/json',
+                                beforeSend: function () {
+                                    $("#ajaxBusy").show();
+                                },
+                                complete: function () {
+                                    $("#ajaxBusy").hide();
+                                },  
+                                success: function (response) {
+                                    console.log(response);
+                                    var GrandTotal = 0;
+                                    var Total = [];
+                                    $.each(response, function (index, elements) {
+                                        var object = {
+                                            ItemName: elements.style + " | " + elements.shedule + " | " + elements.color,
+                                            CustomerPO: elements.po,
+                                            Barcode: elements.barcodeNo,
+                                            GatePass: elements.controlId,
+                                            Quantity: elements.qty01,
+                                            Rate: elements.unitPrice,
+                                            InvoiceValue: elements.price,
+                                            Remarks: elements.remark
+                                        }
+                                        gridData1.push(object);
+                                    });
+                                    //console.log(gridData1);
+                                    $("#item-grid-print").data('kendoGrid').dataSource.data(gridData1);
+
+                                    //Set Quantitiy Text
+                                    EnableInputs();
+                                },
+                                error: function (jqXHR, textStatus, errorThrown) {
+                                    formatErrorMessage(jqXHR, errorThrown, "Invoice");
+                                    EnableInputs();
+                                }
+                        });
+
+                        dispatchid = invoiceNumber;
+                        FocusRequestNoTextBox();
+                    }
+                },
+                error: function () {
+                    $("#search-result-grid-gatepass").html('No Results found !!!');
+                    EnableInputs();
+                }
+            });
+
+            //Request Status Grid
+                                                                   
+        } else {
+            msgBox.show('කරුණාකර යැවීමේ සටහන් අංකයක් තෝරා නැවත උත්සාහ කරන්න.', 'please select a request id and try again.', 'අවවාදයයි / Warning', 'BS01', 'Warning');
+            EnableInputs();
+        }
+    }
+    
+    function getPDF(selector) {
+      kendo.drawing.drawDOM($(selector), {
+           //forcePageBreak: ".items-page-break",
+           paperSize: "A4",
+           allPages: true,
+           avoidLinks: true,
+           paperSize: "A4",
+           margin: { top: "0cm", left: "0cm", right: "1cm", bottom: "0cm" },
+           repeatHeaders: true,
+           scale: 0.9
+      }).then(function (group) {
+            kendo.drawing.pdf.saveAs(group, "Invoice Note" + $("#Invoice-number-c").html() + ".pdf");
+        });
+    }
+
+    function formatDate(date) {
+        return (date == null || date == undefined || date == "") ? date : date.replace(/T/g, " ")
+    }
+
+    function resetlRequest() {
+        resetControlers();
+    }
+
+    function DisableInputs() {
+        $("#new-request-button").attr('disabled', 'disabled');
+
+        $("#gate-pass-request-create-button").attr('disabled', 'disabled');
+        $("#gate-pass-request-cancel-button").attr('disabled', 'disabled');
+        $("#gate-pass-request-reset-button").attr('disabled', 'disabled');
+
+        $("#filterGatePassRequestButton").attr('disabled', 'disabled');
+        $("#item-add-button").attr('disabled', 'disabled');
+        //$("#cancel-button").attr('disabled', 'disabled');
+
+        $("#ajaxBusy").show();
+    }
+
+    function EnableInputs() {
+        $("#new-request-button").removeAttr('disabled');
+
+        $("#gate-pass-request-create-button").removeAttr('disabled');
+        $("#gate-pass-request-cancel-button").removeAttr('disabled');
+        $("#gate-pass-request-reset-button").removeAttr('disabled');
+
+        $("#filterGatePassRequestButton").removeAttr('disabled');
+        $("#item-add-button").removeAttr('disabled');
+        //$("#cancel-button").removeAttr('disabled');
+        
+        $("#ajaxBusy").hide();
+    }
+    //End of Print Controllers
+</script>
+
+
+<div>
+    <div style="margin-top: 5px; margin-left: 5px;">
+        <!--CREATE REQUEST BUTTON: BEGIN -->
+        <div id="createNewGatePass">
+            <div style="float: left; margin-right: 30px;">
+                <button id="new-request-button" class="k-button" style="background-color: #FFA000; border: none; font-size: 17px; font-weight: 600; color: #000000;" onclick="openCreateNewPass()">
+                    <span class="k-icon k-i-plus" style="margin-right: 7px;"></span><span>Generate Invoices</span>
+                </button>
+            </div>
+            <div style="float: left;">
+                <span id="gate-pass-creation-status" style="color: #51a351; font-size: large; visibility: hidden">
+                    Sucessful
+                </span>
+            </div>
+        </div>
+        <div id="setInvoicePara">
+            <div style="float: left; margin-right: 30px;">
+                <button id="new-request-button" class="k-button" style="margin-left: -105px; background-color: #E65100; border: none; font-size: 17px; font-weight: 600; color: #000000;" onclick="openInvoiceParameters()">
+                    <span class="k-icon k-i-plus" style="margin-right: 7px;"></span><span>Manage Invoice Parameters</span>
+                </button>
+            </div>
+            <div style="float: left;">
+                <span id="gate-pass-creation-status" style="color: #51a351; font-size: large; visibility: hidden">
+                    Sucessful
+                </span>
+            </div>
+        </div>
+        <div style="clear:both;"></div>
+    </div>
+    <!--CREATE REQUEST BUTTON: END -->
+
+    <!--FILTER: BEGIN -->
+    <div style="margin: 5px; margin-top: 14px;">
+        <div>
+            <div style="float: left; height: 35px; margin-right: 10px;">
+                <div style="float: left; width: 125px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="FromDate">
+                        Date From
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <input id="FromDate" class="bu-form-control" style="width:180px"/>
+                </div>
+            </div>
+            <div style="float: left; height: 35px; margin-right: 10px;">
+                <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="ToDate">
+                        Date To
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <input id="ToDate" class="bu-form-control" style="width:180px"/>
+                </div>
+            </div>
+            <div style="float: left; height: 35px; margin-right: 10px;">
+                <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="Month">
+                        Month
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <input id="Month" class="bu-form-control" style="width:180px" disable="disabled"/>
+                </div>
+            </div>
+            <div style="float: left; height: 35px; margin-right: 10px;">
+                <div style="float: left; height: 35px; margin-right: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                        <label for="RequestIdFilter">
+                            Request Id
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input class="k-textbox" id="RequestIdFilter" name="receiverEmail" style="width:200px; height: 27px; color: black;" type="text" value="">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div>
+            <div style="clear: both;">
+                <div style="float: left; height: 35px; margin-right: 10px; margin-bottom: 2px;">
+                    <div style="float: left; width: 130px; margin-right: 10px; text-align: right; font-weight: bold;">
+                        <label for="InvoiceStatusFilter">
+                            Invoice Status
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input class="k-textbox" id="InvoiceStatusFilter" name="receiverEmail" style="width:180px; font-size: 12px !important; height: 29px;" type="text" value="">
+                    </div>
+                </div>
+            </div>
+            <div>
+                <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="RequestIdFilter">
+                        Location To
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <input class="k-textbox" id="newLocationToFilter" name="location" style="width:180px; font-size: 12px !important; height: 29px;" type="text" value="">
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div>
+        <div style="clear: both;">
+            <div style="float: left; height: 35px; margin-right: 10px;">
+                <div style="float: left; width: 110px; margin-right: 10px; visibility: hidden;">
+                    Invisible text
+                </div>
+                <div style="float: left; padding-left: 5px;">
+                    <button id="filterGatePassRequestButton" class="k-button" style="width: 180px; margin-left: 14px; background-color: green; border: none; font-size: 17px; font-weight: 600; color: #000000;" onclick="RefreshRequestGrid()">
+                        <span class="k-icon k-i-search" style="margin-right: 7px; text-align:left;"></span><span>Search</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!--FILTER: END -->
+
+    <!--DETAILS PAGE GRID: BEGIN -->
+    <div style="float: left; height: 35px; margin-right: 10px; width: 100%;">
+        <div style="float: left; width: 110px; margin-right: 10px; visibility: hidden;">
+             Invisible text
+        </div>
+        <div id="request-grid" style="clear: both; padding-top: 5px; max-width: 99%;"></div>
+    </div>
+</div>
+
+<!--CREATE NEW PASS PAGE: BEGIN -->
+<div id="createNewPass" hidden="hidden">
+    <div style="height: 535px; max-height: 535px; overflow: auto; ">
+        <div style="float: left; width: 450px; margin-right: 10px;">
+            <!--
+            <div style="height: 35px; margin-top: 20px;">
+                <div style="float: left; width: 130px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="return">Type</label>
+                </div>
+                <div style="float: left;">
+                    <div id="newRequestTypeFilter" class="bu-form-control" style="width:180px"></div>
+                </div>
+                <div style="float: left;">
+                    <span id="approvers-requried-sign" style="margin-left: 5px; color: Red;">
+                        *
+                    </span>
+                </div>
+            </div>
+            <div style="clear: both; height: 35px;">
+            </div>
+            <div style="clear: both; height: 35px;">
+                <div style="float: left; width: 130px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="locationTo">
+                        Location To
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <div id="newLocationToFilter" class="bu-form-control" style="width:180px"></div>
+                </div>
+                <div style="float: left;">
+                    <span style="margin-left: 5px; color: Red;">*</span>
+                </div>
+            </div>
+            <div style="clear: both; height: 55px;">
+                <div style="float: left; width: 130px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="address">
+                        Address
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <textarea class="k-textbox" cols="20" id="address" name="address" rows="2" style="width:200px;" disabled="disabled"></textarea>
+                </div>
+            </div>
+            <div style="clear: both; height: 35px;">
+                <div style="float: left; width: 130px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="departmentTo">
+                        Department To
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <div id="departmentTo" class="bu-form-control" style="width:180px"></div>
+                </div>
+                <div style="float: left;">
+                    <span style="margin-left: 5px; color: Red;">*</span>
+                </div>
+            </div>
+            <div style="clear: both; height: 60px;">
+                <div style="float: left; width: 130px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="approvers_taglist">
+                        Approver
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <div id="approvers_taglist" class="bu-form-control" style="width:180px"></div>
+                </div>
+                <div style="float: left;">
+                    <span id="approvers-requried-sign" style="margin-left: 5px; color: Red; visibility: hidden;">
+                        *
+                    </span>
+                </div>
+            </div>
+            -->
+        </div>
+        <div style="float: left; width: 520px; margin-right: 10px;">
+            <!--
+            <div style="height: 35px; margin-top: 20px;">
+                <div style="float: left; width: 130px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="receiverName">
+                        Receiver name / contact no
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <input class="k-textbox" id="receiverName" name="receiverName" style="width:200px;" type="text" value="">
+                </div>
+            </div>
+            <div style="height: 35px;">
+            </div>
+            <div style="height: 35px;">
+                <div style="float: left; width: 130px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="receiverEmail">
+                        Receiver email
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <input class="k-textbox" id="receiverEmail" name="receiverEmail" style="width:200px;" type="text" value="">
+                </div>
+            </div>
+            <div style="height: 35px;">
+                <div style="float: left; width: 130px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="watcherEmail">
+                        Watcher email
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <input class="k-textbox" id="watcherEmail" name="watcherEmail" style="width:200px;" type="text" value="">
+                </div>
+            </div>
+            <div style="height: 35px;">
+                <div style="float: left; width: 130px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="courierNo">
+                        Ref. No.
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <input class="k-textbox" id="courierNo" name="courierNo" style="width:200px;" type="text" value="">
+                </div>
+            </div>
+            <div style="height: 35px;">
+                <div style="float: left; width: 130px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="gpRemarks">
+                        Remarks
+                    </label>
+                </div>
+                <div style="float: left; margin-right: 10px;">
+                    <textarea class="k-textbox" cols="20" id="gpRemarks" name="gpRemarks" rows="2" style="width:200px;resize: none;"></textarea>
+                </div>
+            </div>
+            <div style="height: 35px; padding-top: 15px;">
+                <div style="float: left; width: 130px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="vehicleNo">
+                        Vehicle No
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <input class="k-textbox" id="vehicleNo" name="vehicleNo" style="width:200px;" type="text" value="">
+                </div>
+            </div>
+            -->
+        </div>
+        <div style="clear:both;"></div>
+        <div style="clear: both;" hidden="hidden">
+            <h2>
+                Items
+            </h2>
+        </div>
+        <div>
+            <button id="open-request-item-window-button" class="k-button other-buttons" style="width: 110px;" onclick="openAddItemWindow()">
+                <span class="k-icon k-i-plus" style="margin-right: 7px;"></span><span>Add</span>
+            </button>
+            <button id="open-request-expand-window-button" class="k-button other-buttons" style="margin-left: 12px; width: 32px;" onclick="openExandTable()">
+                <span class="k-icon k-i-full-screen" style="margin-right: 7px;"></span><span></span>
+            </button>
+        </div>
+        <!-- REQUEST ITEMS GRID: BEGIN -->
+        <div style="clear: both; padding-top: 5px;">
+            <div id="request-items-grid" style="margin-top: 5px; margin-bottom: 5px; width: 980px; height:405px">
+        </div> 
+        <!--END: Remove Request item window -->
+        <!-- REQUEST ITEMS GRID: END -->
+        </div>
+        <div style="height: 50px"></div>
+    </div>
+    <div style="clear: both; height: 35px; margin-top: 20px; position: absolute; top: 10; bottom: 0; height: 7%;">
+        <div style="float: left; margin-right: 10px;">
+            <input id="gate-pass-request-create-button" type="button" class="k-button button-done" value="Generate" style="width: 180px; margin-right: 20px !important" onclick="generateInvoices()">
+        </div>
+        <div style="float: left; margin-right: 10px;">
+            <input id="gate-pass-request-reset-button" type="button" class="k-button button-reset" value="Reset" style="width: 180px; margin-right: 20px !important" onclick="resetlRequest()">
+        </div>
+        <div style="float: left; margin-right: 10px;">
+            <input id="gate-pass-request-cancel-button" type="button" class="k-button button-cancel" value="Cancel" style="width: 180px; margin-right: 20px !important" onclick="cancelRequest()">
+        </div>
+    </div>
+</div>
+<!--CREATE NEW PASS PAGE: END -->
+
+<!--ADD ITEMS PAGE: BEGIN -->
+<div id="add-items-grid" hidden="hidden">
+    <div style="height: 535px; max-height: 535px; overflow: auto; ">
+        <!--FILTER: BEGIN -->
+        <div style="margin: 5px;">
+            <div>
+                <div style="float: left; height: 35px; margin-right: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                        <label for="DateFromFilter">
+                            From
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="DateFromFilter" class="bu-form-control" style="width:180px"/>
+                    </div>
+                </div>
+                <div style="float: left; height: 35px; margin-right: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                        <label for="DateToFilter">
+                            To
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="DateToFilter" class="bu-form-control" style="width:180px"/>
+                    </div>
+                </div>
+                <div style="float: left; height: 35px; margin-right: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                        <label for="MonthFilter">
+                            Month
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="MonthFilter" class="bu-form-control" style="width:180px"/>
+                    </div>
+                </div>
+                <div style="float: left; height: 35px; margin-right: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                        <label for="ModeFilter">
+                            Facility
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="ModeFilter" class="bu-form-control" style="width:180px"/>
+                    </div>
+                </div>
+                <div style="float: left; height: 35px; margin-right: 10px;">
+                    <div style="float: left; width: 110px; margin-right: 10px; visibility: hidden;">
+                        Invisible text
+                    </div>
+                    <div style="float: left;">
+                        <button id="filterGatePassRequestButton" class="k-button button-done" style="width: 180px;" onclick="searchForBagData()">
+                            <span class="k-icon k-i-search" style="margin-right: 7px; text-align:left;"></span><span>Search</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!--FILTER: END -->
+
+        <!-- REQUEST ITEMS GRID: BEGIN -->
+        <div id="add-items-grid-data" style="margin-top: 5px; margin-top: 80px !important; max-height: 420px !important; height: 400px;">   
+        <!--END: Remove Request item window -->
+        <!-- REQUEST ITEMS GRID: END -->
+        </div>
+        <div style="height: 50px"></div>
+    </div>
+    <div style="clear: both; height: 35px; margin-top: 20px; position: absolute; top: 10; bottom: 0; height: 7%;">
+        <div style="float: left; margin-right: 10px;">
+            <input id="item-add-button" type="button" class="k-button button-done" value="Add" style="width: 120px;">
+        </div>
+        <div style="float: left; margin-right: 10px;">
+            <input id="cancel-button" type="button" class="k-button button-cancel" value="Cancel" style="width: 120px;">
+        </div>
+    </div>
+</div>
+<!--ADD ITEMS PAGE: END -->
+
+<!-- UPDATE STATUS WINDOW: START -->
+<div id="updateStatus" hidden="hidden">
+    <div style="height: 280px; max-height: 320px; overflow: auto; ">
+        <div style="margin-top: 10px;">
+            <div style="float: left; height: 35px; margin-right: 10px;">
+                <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="RequestId">
+                        Request Id
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <label id="RequestId" style="width:180px"></label>
+                </div>
+            </div>
+            <div style="float: left; height: 35px; margin-right: 10px;">
+                <div style="float: left; width: 110px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="Seq">
+                        Sequence
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <label id="Seq" style="width:180px"></label>
+                </div>
+            </div>
+            <div style="float: left; height: 35px; margin-right: 10px;">
+                <div style="float: left; width: 140px; margin-right: 10px; text-align: right; font-weight: bold;">
+                    <label for="Department">
+                        Department To
+                    </label>
+                </div>
+                <div style="float: left;">
+                    <label id="Department" style="width:180px"></label>
+                    <label id="DepartmentId" style="width:180px" hidden="hidden"></label>
+                </div>
+            </div>
+            <label id="currentStatus" style="width:180px" hidden="hidden"></label>
+            <label id="approverid" style="width:180px" hidden="hidden"></label>
+        </div>
+        <div style="float: left; width: 98%; height: 35px; margin-right: 10px;">
+            <div id="request-status-grid" style="float: left; margin-left: 10px;"> 
+            </div>
+        </div>
+    </div>
+</div>
+<!-- UPDATE STATUS WINDOW: START -->
+
+<!-- Show Request Details - info :START -->
+<div style="font-size: 12px;" id="infowindow" hidden="hidden">
+    <div style="padding: 10px;">
+        <div>
+            <div style="float: left; width: 50%;">
+                <div style="height: 35px;">
+                    <div style="float: left; width: 120px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label for="return">
+                            Type
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="type-text">
+                        </label>
+                    </div>
+                </div>
+                <div style="height: 35px;">
+                    <div style="float: left; width: 120px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label for="return">
+                            Status
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="status-text">
+                        </label>
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 120px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Location From
+                        </label>
+                    </div>
+                    <div style="float: left;">   
+                        <label id="locationfrom-text">
+                        </label>    
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 120px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Location To
+                        </label>
+                    </div>
+                    <div style="float: left;">  
+                        <label id="locationto-text">
+                        </label>      
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 120px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Department To
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="department-text">
+                        </label>
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 120px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Address
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="address-text">
+                        </label>
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 120px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Approval
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="approval-text">
+                        </label>
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 120px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Security Seal No.
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="securitysealno-text">
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div style="float: left; width: 50%;">
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 110px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Created On
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="createdon-text">
+                        </label>
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 110px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Request By
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="requestby-text">
+                        </label>
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 110px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Receiver
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="receiver-text">
+                        </label>
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 110px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Receiver Email
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="receiveremail-text">
+                        </label>
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 110px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Watcher Email
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="watcheremail-text">
+                        </label>
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 110px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Reference No
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="referenceno-text">
+                        </label>
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 110px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Vehicle No.
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="veficle-text">
+                        </label>
+                    </div>
+                </div>
+                <div style="clear: both; height: 35px;">
+                    <div style="float: left; width: 110px; margin-right: 25px; text-align: left; font-weight: bold;">
+                        <label>
+                            Remarks
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <label id="remarks-text">
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div style="clear:both;">
+            <div>
+                <h5>
+                    Items
+                </h5>
+            </div>
+            <!-- REQUEST ITEMS GRID: BEGIN -->
+            <div id="read-only-request-items-grid" style="margin-top: 5px;"></div>
+        </div>
+        <div style="clear:both;">
+            <div>
+                <h5>
+                    Workflow
+                </h5>
+            </div>
+            <!-- REQUEST ITEMS GRID: BEGIN -->
+            <div id="request-status" style="margin-top: 5px;"></div>
+        </div>
+        <div style="clear:both; margin-bottom: 13px;"></div>
+    </div>
+</div>
+<!-- Show Request Details - info :END-->
+
+<!-- uppdate Status Detail Window -->
+<div id="checkforAllBags" style="height: 670px" hidden="hidden">
+    <div style="padding: 10px;">
+        <div>
+            <div style="float: left;">
+                <div style="height: 35px;">
+                    <div style="float: left; width: 190px; margin-right: 25px; text-align: right; font-weight: bold;">
+                        <label for="scanBagBarodeSearch">
+                            Scan Bag Barcode
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <!--<input id="scanBagBarodeSearch" class="k-textbox" style="width:210px"/>-->
+                    </div>
+                </div>
+            </div>    
+        </div>
+        <div>
+            <div style="float: left; width: 50%;">
+                <div style="height: 35px;">
+                    <div style="float: left; width: 190px; margin-right: 25px; text-align: right; font-weight: bold;">
+                        <label for="unloading-location">
+                            Unloading Location
+                        </label>
+                    </div>
+                    <div style="float: left;">
+                        <input id="unloading-location" class="k-textbox" style="width:210px"/>
+                    </div>
+                </div>
+            </div>    
+        </div>
+        <div style="clear:both;">
+            <div>
+                <h2>
+                    Items
+                </h2>
+            </div>
+            <!-- REQUEST ITEMS GRID: BEGIN -->
+            <div id="bag-items-grid" style="margin-top: 5px;">
+            </div>
+        </div>
+    </div>
+    <div style="clear: both; height: 35px; margin-top: 20px; position: absolute; top: 10; bottom: 0; height: 7%;">
+        <div style="float: left; margin-right: 10px;">
+            <input id="grn-button" type="button" class="k-button" value="Close Request" style="width: 140px;" onclick="closeRequest()">
+        </div>
+        <div style="float: left; margin-right: 10px;">
+            <input id="cancel-button" type="button" class="k-button" value="Cancel" style="width: 100px;" onclick="cnacelBagItemwindow()">
+        </div>
+    </div>
+</div>
+<!-- uppdate Status Detail Window -->
+
+<!-- Print Invoice Window: START -->
+<div id="printpdf" hidden="hidden"> <!-- hidden="hidden" -->
+    <div id="example">
+        <div class="box wide hidden-on-narrow">
+            <div style="height: 35px; margin-top: 2px;">
+                <div style="float: left; width: 120px; margin-right: 10px; margin-left: 4px; text-align: left; font-weight: bold;">
+                    <label for="return">Select Page Size</label>
+                </div>
+                <div style="float: left;">
+                    <select id="paper" style="width: 100px;">
+                        <option value="size-a4" selected>A4</option>
+                        <option value="size-letter">Letter</option>
+                        <option value="size-executive">Executive</option>
+                    </select>
+                </div>
+                <div style="float: left;">
+                    <span id="approvers-requried-sign" style="margin-left: 5px; color: Red;">
+                        *
+                    </span>
+                </div>
+                <div style="float: left;  margin-left: 20px; text-align: left; font-weight: bold;">
+                    <button class="export-pdf k-button" onclick="getPDF('.pdf-page')">Export</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="page-container hidden-on-narrow">
+            <div class="pdf-page size-a4">
+                <div class="inner-page">
+                    <table class="tg-i" style="width: 100% !important;">
+                        <thead>
+                            <tr>
+                                <th colspan="4"><span class="company-logo"><img src="../images/logo.png" style="width: 80px; margin-top: -7px; margin-bottom: -8px;"/></span></th>
+                                <th class="tg-wa1i" colspan="9" style="font-weight: 600; text-align-last: right;">Tax Invoice (Suspended VAT)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="tg-baqh" colspan="6"> </td>
+                                <td class="tg-baqh" colspan="6"> </td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax left-border top-border" colspan="2" rowspan="4" style="width: 60px;">Bill To </td>
+                                <td class="tg-baqh top-border right-border" colspan="5" rowspan="4" id="bill-to-text"></td>
+                                <td class="tg-0lax top-border" colspan="2" rowspan="3" style="width: 60px;">Bill From</td>
+                                <td class="tg-baqh top-border right-border" colspan="5" rowspan="3" id="bill-from-text"></td>
+                            </tr>
+                            <tr>
+                            </tr>
+                            <tr>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax" colspan="2">Tel Nos</td>
+                                <td class="tg-0lax right-border" colspan="5" id="tel-no-from"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax left-border" colspan="2">V.A.T No</td>
+                                <td class="tg-baqh  right-border" colspan="5" id="vat-no-to-text"></td>
+                                <td class="tg-0lax" colspan="2">V.A.T No.</td>
+                                <td class="tg-0lax right-border" colspan="5" id="vat-no-from-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax left-border" colspan="2">SVAT No</td>
+                                <td class="tg-baqh  right-border" colspan="5" id="svat-no-to-text"></td>
+                                <td class="tg-0lax" colspan="2">SAVT No.</td>
+                                <td class="tg-0lax right-border" colspan="5" id="svat-no-from-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax left-border" colspan="2">Atten</td>
+                                <td class="tg-baqh right-border" colspan="5" id="atten-text"></td>
+                                <td class="tg-0lax" colspan="2">Printed On</td>
+                                <td class="tg-0lax right-border" colspan="5" id="printed-on-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax bottom-border left-border" rowspan="4" colspan="2">Invoice To</td>
+                                <td class="tg-baqh bottom-border right-border" colspan="5" rowspan="4" id="Invoice-to-text"></td>
+                                <td class="tg-0lax"  colspan="2">Invoice No.</td>
+                                <td class="tg-0lax right-border" colspan="5" id="invoice-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax" colspan="2">Order No.</td>
+                                <td class="tg-0lax right-border" colspan="5" id="order-no-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax" colspan="2">Delivery No.</td>
+                                <td class="tg-0lax right-border" colspan="5" id="delivery-no-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax bottom-border" colspan="2">Delivery Date</td>
+                                <td class="tg-0lax bottom-border right-border" colspan="5" id="delivery-date-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax" colspan="4">Washing, Dyeing and Finishing Charges</td>
+                                <td class="tg-0lax" colspan="2">HS CODE</td>
+                                <td class="tg-0lax" colspan="3">S0000006 </td>
+                                <td class="tg-baqh" colspan="4"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-1wig" colspan="14"><div id="item-grid-print" style="margin-left: -5px;"></div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax" colspan="13"> </td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax top-border left-border" colspan="3">NBT</td>
+                                <td class="tg-baqh top-border right-border" colspan="11" id="NBT-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax left-border" colspan="3">Value Added Tax in USD</td>
+                                <td class="tg-baqh right-border" colspan="11" id="value-added-tax-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax bottom-border left-border" colspan="3">Total Invoice Value in USD </td>
+                                <td class="tg-baqh bottom-border right-border" colspan="11" id="total-invoice-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax" colspan="13">For VAT Purposes Only</td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax top-border left-border" colspan="3">Exchange Rate</td>
+                                <td class="tg-0lax right-border top-border" colspan="11" id="exchange-rate-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax left-border" colspan="3" id="vat-label-text"></td>
+                                <td class="tg-0lax right-border" colspan="11" id="vat-lkr-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax left-border" colspan="3">VAT Suspended In LKR</td>
+                                <td class="tg-0lax right-border" colspan="11" id="total-suspended-text"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax left-border right-border bottom-border" colspan="14">In terms of the Value Added Tax Act, No 14 of 2002, as amended, VAT on supply of the above goods is suspended. Therefore VAT as Appeared in this Tax Invoice is not claimable as input tax for VAT purposes.</td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax" colspan="14"> </td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax">Issued By</td>
+                                <td class="tg-baqh" colspan="3">.........................</td>
+                                <td class="tg-baqh" colspan="3"></td>
+                                <td class="tg-0lax" colspan="2">Received By</td>
+                                <td class="tg-baqh" colspan="3">.........................</td>
+                                <td class="tg-0lax"></td>
+                            </tr>
+                            <tr>
+                                <td class="tg-0lax" colspan="11">THIS IS AN AUTOMATED INVOICE THEREFORE MANUAL SIGNATURE IS NOT REQUIRED</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="responsive-message"></div>
+
+        <!-- Load Pako ZLIB library to enable PDF compression -->
+    </div>
+</div>
+<!-- End Print Invoice Window: END -->
+
+<!--Error Table Window: START-->
+<div id="errorWindow" hidden="hiden">
+    <div style="clear:both;">
+        <div>
+            <h2>
+                Rejected Items Summary
+            </h2>
+        </div>
+        <!-- ERROR ITEMS GRID -->
+        <div id="error-items-grid" style="margin-top: 5px;">
+        </div>
+    </div>
+</div>
+<!--Error Table Window: END-->
+
+<!--Expanded Table Window: START-->
+<div id="expandedWindow" hidden="hiden">
+    <div style="clear:both;">
+        <div>
+            <h2>
+                Items
+            </h2>
+        </div>
+        <!-- REQUEST ITEMS GRID -->
+        <div id="expand-items-grid" style="margin-top: 5px;">
+        </div>
+    </div>
+</div>
+<!--Expanded Table Window: END-->
+
+<!--Expanded Table Window: START-->
+<div id="managePrametersWindow" hidden="hiden" style="height: 90%;">
+    <div style="clear:both;">
+        <!-- REQUEST ITEMS GRID -->
+        <div id="manage-parameters-grid" style="margin-top: 5px;">
+        </div>
+    </div>
+</div>
+<!--Expanded Table Window: END-->
+
+
+<style>
+    .tg-i th {
+        font-size: 9px;
+    }
+</style>
+                                

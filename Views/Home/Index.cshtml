@@ -1,0 +1,46 @@
+<!--@{
+    Layout = "_LoginLayout";
+}
+        <script>
+        $(document).ready(function () {
+            
+            var jsonObj = {
+                ClientIP: '@ViewBag.ClientIP'
+            };         
+            $.ajax({
+                url: '@ViewBag.WebAPIURL/Security/GetClientByIP?clientIP=10.10.32.170',
+                type: 'GET',
+                dataType: 'json',
+                                async: false,
+                data: jsonObj,
+                contentType: 'application/json',
+                success: function (data) {
+                    if(data != null){
+                        sessionStorage.setItem("Clientconfig", JSON.stringify(data));
+                        sessionStorage.setItem("IsValidClient", true);                       
+                        sessionStorage.setItem("IsSignedIn", 0)                         
+                        sessionStorage.setItem("UserId", "");
+                        sessionStorage.setItem("ClientIP", '@ViewBag.ClientIP')
+                        
+                        console.log(data);   
+                        window.location.href = "Login";            
+                    } 
+                    else{
+                        //window.location.href = "Error";
+                        msgBox.show('Client not found. Please contact the System Administrator', 'Warning');                      
+                    }            
+                },
+                error: function (jqXHR) {                 
+                    if (jqXHR.status == 400) {
+                        //window.location.href = "Error";
+                        msgBox.show('Client validation failed. Please contact the System Administrator', 'Warning');                        
+                    }
+                    else {
+                        //window.location.href = "Error";
+                        msgBox.show('Sorry, something went wrong. Please contact the System Administrator', 'Warning');                        
+                    }
+                }
+            });            
+        });
+    </script>
+    -->

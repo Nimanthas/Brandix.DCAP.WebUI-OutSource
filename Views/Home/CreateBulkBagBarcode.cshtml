@@ -1,0 +1,3170 @@
+﻿@{
+Layout = "_Layout";
+}
+<script type="text/javascript">
+
+//Declare variable for Models and status
+var isValidClient = Answer.Null;
+var clientconfig = null;
+var userPermissionList = null;   
+var selectedScanOption = ScanOption.Non;
+var selectedTrxMode = TransactionMode.Non;
+var selectedScanAction = Action.Non;
+var selectedFunction = Answer.Null;
+var scannedCount = 0; 
+var scannedStatus = ScannedStatus.Non;
+var isScanCompleted = false; 
+var clientIP = null; 
+var txUser = null;   
+
+var selectedStyle = null;
+var selectedShedule = null;
+var selectedColor = null; 
+var selectedSize = null;
+
+var selectedWfConfig = null;
+var selectedScanCounterId = null;
+
+// var selectedScanCounterPO = null;    
+// var selectedScanCounterVal = null; 
+
+var wfid = null;
+var goodQty = 0;
+var scrapQty = 0;
+var reworkQty = 0;
+var flag = true;
+
+var styleSearchGrid = null;
+var styleSearchWindow = null;
+var sheduleSearchWindow = null;
+var sheduleSearchGrid = null;
+var colorSearchWindow = null;
+var sizeSearchGrid = null;
+var sizeSearchWindow = null;
+var colorSearchGrid = null;
+
+var poCounterResetWindow = null;
+var scannedBarcode = null;
+var POCounters = null;
+var isValidBarcode = false;  
+var WFDEPInstId = 0;
+
+var ScanDataBackup = null;
+
+var sacanComplete = true;
+var errorbeforestauscomplete = null;
+
+var runningPOCounters = [];
+var lastUpdatedCounterId = null;
+var haltsystem = false;
+
+var previoushour = null;
+
+//Page Load Event
+    $(document).ready(function () {
+        refreshmsgBoxHeaderStyle();
+        getSessionInfo();//
+        EnableControllers();
+        setClientConfigInfo();
+        checkforpermission()
+        sacanComplete = true;
+        errorbeforestauscomplete = '';
+
+        $('#styleSearchBtn').focus();
+        $("#sitebody").append(
+            '<div id="ajaxBusy" class="ajaxBusy"></div>'
+        );
+        $("#ajaxBusy").hide();
+        $('#main').show();
+        $('#pocounterdiv').hide();
+
+        $(document.body).keydown(function (e) {
+            if (e.altKey && e.keyCode == 87) {
+                $('#styleSearchGrid').data("kendoGrid").table.focus();
+            }
+        });
+
+        $(document).on('keydown', disableFunctionKeys);
+        (function blink() {
+            $('.blinktext').fadeOut(150).fadeIn(150, blink);
+        })();
+        $('#pageTitleBar').html('<i class="fas fa-barcode pageMainIcon"></i><span class="pageTitle">DCap - Non-Apparel Group Barcode Generator</span>');
+
+        initializeControlEvents();//
+        checkLoginStatus();//
+        setPageControlsStartupStatus();
+        initializeFunctionKeys();
+        populatePermissionList();
+
+        //Enable barcode scan in the begging
+        //$("#barcodeQuantityTxt").removeAttr("disabled");
+        //$("#barcodeBcodeTxt").removeAttr("disabled"); 
+        //$("#barcodeBcodeTxt").focus();
+
+        $("#ddlMainOperation").data("kendoDropDownList").dataSource.data([]);        
+        getOperation();
+        setMainOperationVisibility();
+
+        $('#sitebody').removeClass('body-login');
+        if (isValidClient == Answer.Null) {
+            window.location.href = "Login";
+        }
+        else if (isValidClient != Answer.Null && clientconfig.dataCaptureMode != DataCaptureMode.Washing) {
+            msgBox.show('මෙම යන්ත්‍රයට බාර්කෝඩ් ස්කෑන් කිරීම සඳහා අවසර නැත.', 'This device is not authorized for Bar-code Scan.', 'අවවාදයයි / Warning', 'BS01', 'Warning', function () {
+                window.location.href = "Menu";
+            });
+        }
+    });
+
+    //Document Ready Function: START
+
+    function initializeControlEvents() {
+        refreshmsgBoxHeaderStyle();
+        //Main Selections :START
+        $('#styleSearchBtn').click(function () {
+
+            $("#styleSearchWindowStyleTxt").val("");
+            $('#sheduleDataLabel').html("");
+            $('#colorDataLabel').html("");
+            $('#sizeDataLabel').html("");
+            $("#barcodeSheduleTxt").val("");
+            $("#barcodeColorTxt").val("");
+            $("#barcodeSizeTxt").val("");
+            selectedShedule = null;
+            selectedColor = null;
+            selectedSize = null;
+
+            if (selectedScanOption != ScanOption.Non) {
+                resetControls();
+                setPageControlsStartupStatus();
+            }
+
+            styleSearchWindow = $("#styleSearchWindow").kendoWindow({
+                width: "80%",
+                height: "60%",
+                title: "Style Search",
+                actions: [
+                    "Close"
+                ],
+                modal: true,
+                resizable: false,
+                draggable: false,
+                pinned: true,
+                activate: function () {
+                    $("#styleSearchWindowStyleTxt").select();
+                },
+                close: onStyleSearchClose
+            }).data("kendoWindow");
+
+            styleSearchWindow.wrapper.find('.k-window-titlebar').css({
+                'background-color': 'black',
+                'font-size': '18px',
+                'color': 'white'
+            });
+
+            styleSearchGrid = $("#styleSearchGrid").kendoGrid({
+                autoBind: false,
+                dataSource: {
+                    transport: {
+                        read: '@ViewBag.APIURL/Lookup/GetStylesByStyleNo'
+                    },
+                    schema: {
+                        model: {
+                            fields: {
+                                l1id: { type: "number" },
+                                l1no: { type: "string" },
+                                ref01: { type: "string" }
+                            }
+                        }
+                    },
+                    type: "json"
+                },
+                height: "75%",
+                width: "90%",
+                scrollable: true,
+                change: onChangeStyle,
+                navigatable: true,
+                selectable: "multiple cell",
+                dataBound: function (e) {
+                    var cell = this.tbody.find("tr[role='row'] td:first");
+                    this.current(cell);
+                },
+                columns: [
+                    { field: "l1id", title: "Style Id", width: "30%", hidden: true },
+                    { field: "l1no", title: "Style No", width: "30%" },
+                    { field: "ref01", title: "Description", width: "70%" }
+                ]
+            }).data("kendoGrid");
+
+            var arrows = [38, 40];
+            styleSearchGrid.table.on("keydown", function (e) {
+                if (arrows.indexOf(e.keyCode) >= 0) {
+                    setTimeout(function () {
+                        styleSearchGrid.select($("#rowSelection_active_cell").closest("tr"));
+                    }, 10);
+                }
+            });
+
+            styleSearchWindow.one("activate", function () {
+                styleSearchGrid.resize();
+            });
+            styleSearchWindow.open().center();
+            $("#styleSearchWindowStyleTxt").keydown(function (e) {
+                if (e.keyCode == 13) {
+                    styleSearchGrid.table.focus();
+                }
+            });
+        });
+
+        //Styles are searched in Style Search window on the fly
+        $("#styleSearchWindowStyleTxt").keyup(function () {
+            $("#barcodeQuantityTxt").val("");
+            $('#barcodeBcodeTxt').val("");
+            if ($("#styleSearchWindowStyleTxt").val().length > 0) {
+                styleSearchGrid.dataSource.read({ Style: $("#styleSearchWindowStyleTxt").val() });
+            } else {
+                styleSearchGrid.dataSource.data([]);
+            }
+        });
+
+        $('#sheduleSearchBtn').click(function () {
+
+            $("#sheduleSearchWindowStyleTxt").val("");
+            $('#colorDataLabel').html("");
+            $('#sizeDataLabel').html("");
+            $("#barcodeColorTxt").val("");
+            $("#barcodeSizeTxt").val("");
+            selectedColor = null;
+            selectedSize = null;
+
+            if ($('#barcodeStyleTxt').val() == "") {
+                msgBox.show('කරුණාකර ස්ටයිලය තෝරන්න.', 'Please select style.', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                    $('#styleSearchBtn').focus();
+                });
+                return;
+            }
+
+            if (selectedScanOption != ScanOption.Non) {
+                resetControls();
+                setPageControlsFunctionStartupStatus();
+            }
+
+            sheduleSearchWindow = $("#sheduleSearchWindow").kendoWindow({
+                width: "80%",
+                height: "60%",
+                title: "Shedule Search",
+                actions: [
+                    "Close"
+                ],
+                modal: true,
+                resizable: false,
+                draggable: false,
+                pinned: true,
+                activate: function () {
+                    $("#sheduleSearchWindowStyleTxt").select();
+                },
+                close: onSheduleSearchClose
+            }).data("kendoWindow");
+
+            sheduleSearchWindow.wrapper.find('.k-window-titlebar').css({
+                'background-color': 'black',
+                'font-size': '18px',
+                'color': 'white'
+            });
+
+            sheduleSearchGrid = $("#sheduleSearchGrid").kendoGrid({
+                autoBind: true,
+                dataSource: {
+                    transport: {
+                        read: '@ViewBag.APIURL/Lookup/GetShedulesByStyleNo?L1id=' + selectedStyle.l1id
+                    },
+                    schema: {
+                        model: {
+                            fields: {
+                                l2id: { type: "number" },
+                                l2no: { type: "string" },
+                                ref01: { type: "string" },
+                                ref02: { type: "string" }
+                            }
+                        }
+                    },
+                    type: "json"
+                },
+                height: "75%",
+                width: "90%",
+                scrollable: true,
+                change: onChangeShedule,
+                navigatable: true,
+                selectable: "multiple cell",
+                dataBound: function (e) {
+                    var cell = this.tbody.find("tr[role='row'] td:first");
+                    this.current(cell);
+                },
+                columns: [
+                    { field: "l2id", title: "Shedule Id", width: "30%", hidden: true },
+                    { field: "l2no", title: "Shedule No", width: "30%" },
+                    { field: "ref01", title: "PO", width: "35%" },
+                    { field: "ref02", title: "Z-Feature", width: "35%" }
+                ]
+            }).data("kendoGrid");
+
+            var arrows = [38, 40];
+            sheduleSearchGrid.table.on("keydown", function (e) {
+                if (arrows.indexOf(e.keyCode) >= 0) {
+                    setTimeout(function () {
+                        sheduleSearchGrid.select($("#rowSelection_active_cell").closest("tr"));
+                    }, 10);
+                }
+            });
+
+            sheduleSearchWindow.one("activate", function () {
+                sheduleSearchGrid.resize();
+            });
+            sheduleSearchWindow.open().center();
+            $("#sheduleSearchWindowStyleTxt").keydown(function (e) {
+                if (e.keyCode == 13) {
+                    sheduleSearchGrid.table.focus();
+                }
+            });
+        });
+
+        //Shedule are searched in Shedule Search window on the fly
+        $("#sheduleSearchWindowStyleTxt").keyup(function () {
+            $("#barcodeQuantityTxt").val("");
+            $('#barcodeBcodeTxt').val("");
+            if ($("#sheduleSearchWindowStyleTxt").val().length > 0) {
+                sheduleSearchGrid.dataSource.read({ Shedule: $("#sheduleSearchWindowStyleTxt").val() });
+            } else {
+                sheduleSearchGrid.dataSource.data([]);
+            }
+        });
+
+        $("#colorSearchBtn").click(function () {
+
+            $("#colorSearchWindowStyleTxt").val("");
+            $('#sizeDataLabel').html("");
+            $("#barcodeSizeTxt").val("");
+            selectedSize = null;
+
+            if ($('#barcodeStyleTxt').val() == "") {
+                msgBox.show('කරුණාකර ස්ටයිලය තෝරන්න.', 'Please select style.', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                    $('#styleSearchBtn').focus();
+                });
+                return;
+            } else if ($('#barcodeSheduleTxt').val() == "") {
+                msgBox.show('කරුණාකර ශේඩුලය තෝරන්න.', 'Please select shedule.', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                    $('#sheduleSearchBtn').focus();
+                });
+                return;
+            }
+
+            if (selectedScanOption != ScanOption.Non) {
+                resetControls();
+                setPageControlsFunctionStartupStatus();
+            }
+
+            $("#colorSearchWindowStyleTxt").val("")
+            $('#colorDataLabel').val("");
+            $('#bcsizeDataLabel').val("");
+            $("#barcodeColorTxt").val("");
+            $("#barcodeSizeeTxt").val("");
+            selectedColor = null;
+            selectedSize = null;
+
+            colorSearchWindow = $("#colorSearchWindow").kendoWindow({
+                width: "80%",
+                height: "60%",
+                title: "Color Search",
+                visible: false,
+                actions: [
+                    "Close"
+                ],
+                modal: true,
+                resizable: false,
+                draggable: false,
+                pinned: true,
+                activate: function () {
+                    $("#colorSearchWindowColorTxt").select();
+                },
+                open: function (e) { $("html, body").css("overflow", "hidden"); },
+                close: onColorSearchClose
+            }).data("kendoWindow");
+
+            colorSearchWindow.wrapper.find('.k-window-titlebar').css({
+                'background-color': 'black',
+                'font-size': '18px',
+                'color': 'white'
+            });
+
+            colorSearchGrid = $("#colorSearchGrid").kendoGrid({
+                autoBind: true,
+                dataSource: {
+                    transport: {
+                        read: '@ViewBag.APIURL/Lookup/GetColorsByStyleSheduleNo?L1id=' + selectedStyle.l1id + '&L2id=' + selectedShedule.l2id,
+                    },
+                    schema: {
+                        model: {
+                            fields: {
+                                l4id: { type: "string" },
+                                l4no: { type: "string" },
+                                l4desc: { type: "string" }
+                            }
+                        }
+                    },
+                    type: "json"
+                },
+                height: "75%",
+                width: "90%",
+                scrollable: true,
+                change: onChangeColor,
+                navigatable: true,
+                selectable: "multiple cell",
+                dataBound: function (e) {
+                    var cell = this.tbody.find("tr[role='row'] td:first");
+                    this.current(cell);
+                },
+                columns: [
+                    { field: "l4id", title: "Color Id", width: "30%", hidden: true },
+                    { field: "l4no", title: "Color No", width: "30%" },
+                    { field: "l4desc", title: "Description", width: "70%" }
+                ]
+            }).data("kendoGrid");
+
+            var arrows = [38, 40];
+            colorSearchGrid.table.on("keydown", function (e) {
+                if (arrows.indexOf(e.keyCode) >= 0) {
+                    setTimeout(function () {
+                        colorSearchGrid.select($("#rowSelection_active_cell").closest("tr"));
+                    }, 10);
+                }
+            });
+
+            colorSearchWindow.one("activate", function () {
+                colorSearchGrid.resize();
+            });
+            colorSearchWindow.open().center();
+            $("#colorSearchWindowColorTxt").keydown(function (e) {
+                if (e.keyCode == 13) {
+                    colorSearchGrid.table.focus();
+                }
+            });
+        });
+       
+        //Colors are searched in Color Search window on the fly
+        $("#colorSearchWindowColorTxt").keyup(function () {
+            $("#barcodeQuantityTxt").val("");
+            $('#barcodeBcodeTxt').val("");
+            colorSearchGrid.dataSource.read({ Color: $("#colorSearchWindowColorTxt").val() });
+        });
+
+        $('#sizeSearchBtn').click(function () {
+
+            $("#sizeSearchWindowStyleTxt").val("");
+
+            if ($('#barcodeStyleTxt').val() == "") {
+                msgBox.show('කරුණාකර ස්ටයිලය තෝරන්න.', 'Please select style.', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                    $('#styleSearchBtn').focus();
+                });
+                return;
+            } else if ($('#barcodeSheduleTxt').val() == "") {
+                msgBox.show('කරුණාකර ශේඩුලය තෝරන්න.', 'Please select shedule.', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                    $('#sheduleSearchBtn').focus();
+                });
+                return;
+            } else if ($('#barcodeColorTxt').val() == "") {
+                msgBox.show('කරුණාකර වර්ණය තෝරන්න.', 'Please select color.', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                    $('#colorSearchBtn').focus();
+                });
+                return;
+            }
+
+            if (selectedScanOption != ScanOption.Non) {
+                resetControls();
+            }
+
+            sizeSearchWindow = $("#sizeSearchWindow").kendoWindow({
+                width: "80%",
+                height: "60%",
+                title: "Size Search",
+                actions: [
+                    "Close"
+                ],
+                modal: true,
+                resizable: false,
+                draggable: false,
+                pinned: true,
+                activate: function () {
+                    $("#sizeSearchWindowStyleTxt").select();
+                },
+                close: onSizeSearchClose
+            }).data("kendoWindow");
+
+            sizeSearchWindow.wrapper.find('.k-window-titlebar').css({
+                'background-color': 'black',
+                'font-size': '18px',
+                'color': 'white'
+            });
+
+            sizeSearchGrid = $("#sizeSearchGrid").kendoGrid({
+                autoBind: true,
+                dataSource: {
+                    transport: {
+                        read: '@ViewBag.APIURL/Lookup/GetSizesByStyleSheduleColorNo?L1id=' + selectedStyle.l1id + '&L2id=' + selectedShedule.l2id + '&L4id=' + selectedColor.l4id,
+                    },
+                    schema: {
+                        model: {
+                            fields: {
+                                l5id: { type: "number" },
+                                l5no: { type: "string" },
+                                l5desc: { type: "string" }
+                            }
+                        }
+                    },
+                    type: "json"
+                },
+                height: "75%",
+                width: "90%",
+                scrollable: true,
+                change: onChangeSize,
+                navigatable: true,
+                selectable: "multiple cell",
+                dataBound: function (e) {
+                    var cell = this.tbody.find("tr[role='row'] td:first");
+                    this.current(cell);
+                },
+                columns: [
+                    { field: "l5id", title: "Size Id", width: "30%", hidden: true },
+                    { field: "l5no", title: "Size No", width: "30%" },
+                    { field: "l5desc", title: "Size Description", width: "70%" }
+                ]
+            }).data("kendoGrid");
+
+            var arrows = [38, 40];
+            sizeSearchGrid.table.on("keydown", function (e) {
+                if (arrows.indexOf(e.keyCode) >= 0) {
+                    setTimeout(function () {
+                        sizeSearchGrid.select($("#rowSelection_active_cell").closest("tr"));
+                    }, 10);
+                }
+            });
+
+            sizeSearchWindow.one("activate", function () {
+                sheduleSearchGrid.resize();
+            });
+            sizeSearchWindow.open().center();
+            $("#sizeSearchWindowStyleTxt").keydown(function (e) {
+                if (e.keyCode == 13) {
+                    sizeSearchGrid.table.focus();
+                }
+            });
+        });
+
+        //Shedule are searched in Shedule Search window on the fly
+        $("#sizeSearchWindowStyleTxt").keyup(function () {
+            $("#barcodeQuantityTxt").val("");
+            $('#barcodeBcodeTxt').val("");
+            if ($("#sizeSearchWindowStyleTxt").val().length > 0) {
+                sizeSearchGrid.dataSource.read({ Size: $("#sizeSearchWindowStyleTxt").val() });
+            } else {
+                sizeSearchGrid.dataSource.data([]);
+            }
+        });
+        //Main Selections :END
+
+        $("#barcodeBcodeTxt").keydown(function (e) {
+            if (e.keyCode == 13) {
+                if ($('#barcodeBcodeTxt').val() != ""){
+                    onchangeBarcode();
+                    return;         
+                }   
+            }
+        });
+
+        $("#barcodeQuantityTxt").keydown(function (e) {
+            if (e.keyCode == 13) {
+                if ($('#barcodeQuantityTxt').val() != "" && $('#barcodeQuantityTxt').val() != "0"){
+                    checkBarcodeIsValid();
+                    return;         
+                }   
+            }
+        });
+
+
+        $('#scanActionAddBtn').click(function () {
+            selectActionAdd();
+            if (selectedScanOption == ScanOption.Continue) {
+                $("#barcodeQuantityTxt").removeAttr("disabled");
+                $("#barcodeBcodeTxt").removeAttr("disabled");
+                $("#barcodeBcodeTxt").focus();
+                return;
+            } else if (selectedScanOption == ScanOption.After) {
+                updateBarcodeScan();
+            }
+        });
+
+        $('#scanActionReverseBtn').click(function () {
+            selectActionReverse();
+            if (selectedScanOption == ScanOption.Continue) {
+                $("#barcodeQuantityTxt").removeAttr("disabled");
+                $("#barcodeBcodeTxt").removeAttr("disabled");
+                $("#barcodeBcodeTxt").focus();
+                return;
+            }  else if (selectedScanOption == ScanOption.After) {
+                updateBarcodeScan();
+            }
+        });
+
+        $('#resetBtn').click(function () {
+            resetControls();
+            $('#lastBarcodeDataLabel').html("");
+            $('#lastTxMode').html("");
+            $('#lastAction').html("");
+            $('#scannedStatusDataLabel').html("");
+        });
+
+        $('#resetCounterBtn').click(function () {
+            //console.log('Calling ResetCounter API by wfdepinstId:' + clientconfig.wfdepinstId);
+            $.ajax({
+                url: '@ViewBag.APIURL/BusinessLogics/ResetCounter?wfdepinstId=' + clientconfig.wfdepinstId,
+                type: 'POST',
+                dataType: 'json',
+                //async: false,
+                contentType: 'application/json; charset=utf-8',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (date) {
+                    //console.log('Calling ResetCounter API succeded.');
+                    $('#dataLabelScanCounter').html("0");
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "CreateBulkBagBarcode");
+                }
+            });
+        });
+
+        var data = [];
+
+        $("#ddlMainOperation").kendoDropDownList({
+            dataTextField: "text",
+            dataValueField: "value",
+            dataSource: data,
+            index: 0,
+
+        });
+
+        //PO Counter Bag Controllers: START
+        $('#BAGBtnClear').click(function () {
+            DisableInputs()
+            var validation = false;
+            var bagqty = parseInt($("#bagSizeTxt").val());
+            var currentqty = parseInt($("#currentQuantityNumber").html());
+
+            //console.log(bagqty, currentqty);
+            if (Number.isInteger($('#bagSizeTxt').val())) {
+                msgBox.show('නීති විරෝධී අක්ෂර.', 'Illegal characters in path. (Bag Size)', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                $('#bagSizeTxt').focus();
+                validationSuccess = false;
+                $("#BAGBtnReset").removeAttr('disabled');
+                });
+                return;
+            }
+            
+
+            if(bagqty > currentqty) {
+                msgBoxConfirm.show('ඔබට පුරවා නැති බෑගය වසා දැමීමට අවශ්‍යද?.',
+                                'Do you want to close the unfilled bag.',
+                                'තහවුරු කරන්න / Confirm',
+                                'BS24',
+                                'Confirm',
+                                function () { 
+                                        closeTheBag();
+                                        validation = true;
+                                        EnableInputs();
+                                    },
+                                function () { 
+                                    validation = false;
+                                    EnableInputs();
+                                    return;
+                                });
+
+            } else if(0 >= currentqty) {
+                msgBox.show('බෑගයේ ප්‍රමාණය 0 විය. කරුණාකර පරීක්ෂා කරන්න.','The bag quantity was 0. Please check.','තහවුරු කරන්න / Confirm','BS24','Confirm',null);
+            } else {
+                closeTheBag();
+                EnableInputs();
+            }
+        });
+
+        $('#BAGBtnReset').click(function () {
+            DisableInputs()
+            var bagqty = parseInt($("#bagSizeTxt").val());
+
+            if(isNaN($("#bagSizeTxt").val())) {
+                msgBox.show('නීති විරෝධී අක්ෂර.', 'Illegal characters in path. (Bag Size)', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                $('#bagBarcodeBcodeTxt').focus();
+                validationSuccess = false;
+                $("#BAGBtnReset").removeAttr('disabled');
+                });
+                return;
+            }
+
+            var bagbarcode = $("#bagBarcodeBcodeTxt").val();
+
+            if(isNaN($("#bagBarcodeBcodeTxt").val())) {
+                msgBox.show('නීති විරෝධී අක්ෂර.', 'Illegal characters in path. (Bag Barcode)', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                $('#bagBarcodeBcodeTxt').focus();
+                validationSuccess = false;
+                $("#BAGBtnReset").removeAttr('disabled');
+                });
+                return;
+            }
+
+            var currentqty = parseInt($("#currentQuantityNumber").html());
+            var cutqty = $("#cutQuantityTxt").html() == "-" ? "-" : parseInt($("#cutQuantityTxt").html());
+
+            if ($("#CounterID").html() == "new counter") {
+                currentqty = 0;
+            }
+            //console.log("QUANTITES for bag: ", bagqty, currentqty, cutqty);
+
+            if((cutqty != "-" ? bagqty <= cutqty : true)) {
+                if(bagqty > currentqty) {
+                    var UserInList = [];
+                    var validationSuccess = true;
+                    if( selectedScanCounterId == "new counter" ){
+                        if (bagbarcode == "") {
+                            msgBox.show('කරුණාකර තීරු කේතය ඇතුළත් කරන්න.', 'Please enter the barcode.', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                            $('#bagBarcodeBcodeTxt').focus();
+                            validationSuccess = false;
+                            $("#BAGBtnReset").removeAttr('disabled');
+                            });
+                            return;
+                        }
+                        if (bagqty == "" || bagqty == 0) {
+                            msgBox.show('කරුණාකර නිවැරදි බෑග් ප්‍රමාණය ඇතුළත් කරන්න.', 'bag size error.', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                            $('#bagBarcodeBcodeTxt').focus();
+                            validationSuccess = false;
+                            $("#BAGBtnReset").removeAttr('disabled');
+                            });
+                            return;
+                        }
+
+                        var isbarcodevalid = checkForBagBarcodeExistence();
+                        if(isbarcodevalid == false) {
+                            msgBox.show('ඇතුළත් කළ තීරු කේතය දැනටමත් භාවිතා කර ඇත.', 'The entered barcode is already in used.', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                            $('#bagBarcodeBcodeTxt').focus();
+                            validationSuccess = false;
+                            $("#BAGBtnReset").removeAttr('disabled');
+                            });
+                            return;
+                        }
+
+                        if(validationSuccess){
+                            ScanDataBackup.BagBarCodeNo = $("#bagBarcodeBcodeTxt").val().replace(/\s/g, '');
+                            ScanDataBackup.BagSize = $("#bagSizeTxt").val();
+                            ScanDataBackup.CounterNumber = $("#counterNumber").val();
+
+                            var UserInList = [];
+                            UserInList.push(ScanDataBackup);
+
+                            if(poCounterResetWindow != null) {
+                                poCounterResetWindow.close();}
+                            EnableInputs();
+
+                            sentToDCAPdb(UserInList);
+                            
+                        }
+                    }
+                    else {
+                        if(bagbarcode != null && bagbarcode != "") {
+                            var BagSize = $("#bagSizeTxt").val();
+                            var counterNumber = $("#counterNumber").val();
+                            var validationSuccess = true;
+                            //console.log(BagSize, counterNumber,Number.isInteger(BagSize));
+                            if (BagSize == "" || BagSize == 0) {
+                                msgBox.show('කරුණාකර නිවැරදි බෑග් ප්‍රමාණය ඇතුළත් කරන්න.', 'bag size error.', 'අවවාදයයි / Warning', 'BS13', 'Warning', function () {
+                                $('#bagSizeTxt').focus();
+                                validationSuccess = false;
+                                $("#BAGBtnReset").removeAttr('disabled');
+                                });
+                                return;
+                            }
+
+                            if(validationSuccess){
+                                resetTheBag(BagSize, bagbarcode);
+                                haltsystem = false;
+                            }
+                        } else {
+                            msgBox.show('බෑග් තීරු කේතය වලංගු එකක් නොවේ.', 'The bag barcode is not a valid one. allocation failed.', 'අවවාදයයි / Warning', 'BS13', 'Warning', null)
+                            $("#BAGBtnReset").removeAttr('disabled'); 
+                        }
+                    }
+                } else {
+                    msgBox.show('නිර්වචනය කරන ලද බෑග් ප්‍රමාණ වත්මන් ප්‍රමාණයට වඩා අඩුය. වෙන් කිරීම අසාර්ථක විය.', 'Defined bag quantitiy is less than current quantitiy. allocation failed.', 'අවවාදයයි / Warning', 'BS13', 'Warning', null)
+                    $("#BAGBtnReset").removeAttr('disabled');
+                }
+            } else {
+                msgBox.show('නිර්වචනය කරන ලද බෑග් ප්‍රමාණය මැහුම් ප්‍රමාණවලට වඩා වැඩිය. වෙන් කිරීම අසාර්ථක විය.', 'Defined bag quantitiy is greater than sweing wip quantitiy. allocation failed.', 'අවවාදයයි / Warning', 'BS13', 'Warning', null)
+                 $("#BAGBtnReset").removeAttr('disabled');
+            }
+        });
+        //PO Counter Bag Controllers: END
+
+        //On Bag Barcode value set
+        $("#bagBarcodeBcodeTxt").keydown(function (e) {
+            if (e.keyCode == 13) {
+                $("#bagBarcodeBcodeTxt").attr('disabled', 'disabled');
+                $("#bagSizeTxt").focus();
+                $("#bagSizeTxt").select();
+            }
+        });
+    }
+
+    function checkforpermission() {
+        if ((userPermissionList.some(permission => permission.functionId === AccessibleFunctions.CreateBulkBag))) {}
+        else {
+            msgBox.show('Bulk බෑග් සෑදීමට ඔබට අවසර නැත.', 'you don not have permission to create bulk bags.', 'අවවාදයයි / Warning', 'BS01', 'Warning', function(){window.location.href = "Menu";});
+        }
+    }
+
+    //Embedded Selection Controllers : START
+    //Embedded to Style Search
+    function onChangeStyle(arg) {
+        var row = $(this.select()).closest("tr");
+        var dataItem = styleSearchGrid.dataItem(row);
+
+        if (dataItem == null)
+            return; 
+        selectedStyle = dataItem;
+
+        // console.log('User selected style..');
+        //console.log(selectedStyle);
+
+        if ($("#styleSearchWindowStyleTxt").val().length > 0) {
+            $("#barcodeStyleTxt").val(selectedStyle.l1no);
+            $('#styleDataLabel').html(selectedStyle.ref01);        
+        }
+        else {
+            $("#styleSearchWindowStyleTxt").val("");
+            $('#styleDataLabel').val("");
+            $('#sheduleDataLabel').val("");
+            $('#colorDataLabel').val("");
+            $('#bcsizeDataLabel').val("");
+            $("#barcodeStyleTxt").val("");
+            $("#barcodeSheduleTxt").val("");
+            $("#barcodeColorTxt").val("");
+            $("#barcodeSizeeTxt").val("");
+            selectedStyle = null;
+            selectedShedule = null;
+            selectedColor = null;
+            selectedSize = null;
+
+        }
+        styleSearchGrid.dataSource.data([]);
+        styleSearchWindow.close();
+    }
+    
+    function onStyleSearchClose() {
+        if (selectedStyle != null) {
+            $("#barcodeStyleTxt").val(selectedStyle.l1no);
+            $('#styleDataLabel').html(selectedStyle.ref01);
+        }
+        else {
+            $("#barcodeStyleTxt").val("");
+            $('#styleDataLabel').html("");
+        }
+        $("#styleSearchWindowStyleTxt").val("");
+        styleSearchGrid.dataSource.data([]);
+    }
+
+    //Embedded to Shedule Search
+    function onChangeShedule(arg) {
+        var row = $(this.select()).closest("tr");
+        var dataItem = sheduleSearchGrid.dataItem(row);
+
+        if (dataItem == null)
+            return; 
+
+        selectedShedule = dataItem;
+        $("#barcodeSheduleTxt").val(selectedShedule.l2no);
+        $('#sheduleDataLabel').html(selectedShedule.ref01 + " - " + selectedShedule.ref02);  
+
+        sheduleSearchGrid.dataSource.data([]);
+        sheduleSearchWindow.close();
+
+        if (selectedScanOption == ScanOption.After) {
+            $("#barcodeQuantityTxt").val("");
+            $("#barcodeBcodeTxt").val("");
+            //$("#barcodeBcodeTxt").removeAttr("disabled");
+            scannedBarcode = null;
+            isValidBarcode = false;//to block function key behaviour
+            //$("#barcodeBcodeTxt").focus();
+        }
+        else if (selectedScanOption == ScanOption.Continue) {
+            scannedBarcode = null;
+            isValidBarcode = false;//to block function key behaviour
+            $("#barcodeQuantityTxt").val("");
+            $("#barcodeBcodeTxt").val("");
+            //$("#barcodeBcodeTxt").focus();
+        }
+        
+        $('#scheduleDataLabel').html("");
+        $('#bcstyleDataLabel').html("");
+        $('#dataLabelzFeature').html("");
+        $('#bcsizeDataLabel').html("");
+        $('#bcColorDataLabel').html("");
+        $('#remainingQtyLabel').html(""); 
+    }
+
+    function onSheduleSearchClose() {
+        if (selectedShedule != null) {
+            $("#barcodeSheduleTxt").val(selectedShedule.l2no);
+            $('#sheduleDataLabel').html(selectedShedule.ref01 + " - " + selectedShedule.ref02);
+        }
+        else {
+            $("#barcodeSheduleTxt").val("");
+            $('#sheduleDataLabel').html("");
+        }
+        $("#sheduleSearchWindowStyleTxt").val("");
+        sheduleSearchGrid.dataSource.data([]);
+    }
+
+    //Embedded to Color Search
+    function onChangeColor(arg) {
+        var row = $(this.select()).closest("tr");
+        var dataItem = colorSearchGrid.dataItem(row);
+        selectedColor = dataItem;
+        colorSearchGrid.dataSource.data([]);
+        colorSearchWindow.close();
+
+        if (selectedScanOption == ScanOption.After) {
+            $("#barcodeQuantityTxt").val("");
+            $("#barcodeBcodeTxt").val("");
+            //$("#barcodeBcodeTxt").removeAttr("disabled");
+            $('#trxModeReworkBtn').attr("disabled", "disabled");
+            $('#trxModeGoodBtn').attr("disabled", "disabled");
+            $('#trxModeScrapBtn').attr("disabled", "disabled");
+            scannedBarcode = null;
+            isValidBarcode = false;//to block function key behaviour
+            //$("#barcodeBcodeTxt").focus();
+        }
+        else if (selectedScanOption == ScanOption.Continue) {
+            scannedBarcode = null;
+            isValidBarcode = false;//to block function key behaviour
+            $("#barcodeQuantityTxt").val("");
+            $("#barcodeBcodeTxt").val("");
+            //$("#barcodeBcodeTxt").focus();
+        }
+
+        $('#scheduleDataLabel').html("");
+        $('#bcstyleDataLabel').html("");
+        $('#dataLabelzFeature').html("");
+        $('#bcsizeDataLabel').html("");
+        $('#bcColorDataLabel').html("");
+        $('#remainingQtyLabel').html("");   
+    }
+
+    function onColorSearchClose() {
+        if (selectedColor != null) {
+            $('#barcodeColorTxt').val(selectedColor.l4no);
+            $('#colorDataLabel').html(selectedColor.l4desc);
+        }
+        else {
+            $('#barcodeColorTxt').val("");
+            $('#colorDataLabel').html("");
+            if (selectedScanOption == ScanOption.After) {
+                $("#barcodeQuantityTxt").val("");
+                $("#barcodeBcodeTxt").val("");
+                //$("#barcodeBcodeTxt").removeAttr("disabled");
+                $('#trxModeReworkBtn').attr("disabled", "disabled");
+                $('#trxModeGoodBtn').attr("disabled", "disabled");
+                $('#trxModeScrapBtn').attr("disabled", "disabled");
+                scannedBarcode = null;
+                isValidBarcode = false;//to block function key behaviour                
+                //$("#barcodeBcodeTxt").focus();
+            }
+            else if (selectedScanOption == ScanOption.Continue) {
+                scannedBarcode = null;
+                isValidBarcode = false;//to block function key behaviour
+                $("#barcodeQuantityTxt").val("");
+                $("#barcodeBcodeTxt").val("");
+                $("#barcodeBcodeTxt").focus();
+            }
+            $('#scheduleDataLabel').html("");
+            $('#remainingQtyLabel').html("");            
+            $('#bcstyleDataLabel').html("");
+            $('#dataLabelzFeature').html("");
+            $('#bcsizeDataLabel').html("");
+            $('#bcColorDataLabel').html("");         
+
+        }
+        $("#colorSearchWindowColorTxt").val("");
+        colorSearchGrid.dataSource.data([]);
+        $("#barcodeBcodeTxt").focus();
+    }
+
+    //Embedded to Size Search
+    function onChangeSize(arg) {
+        var row = $(this.select()).closest("tr");
+        var dataItem = sizeSearchGrid.dataItem(row);
+
+        if (dataItem == null)
+            return; 
+
+        selectedSize = dataItem;
+        $("#barcodeSizeTxt").val(selectedSize.l5no);
+        $('#sizeDataLabel').html(selectedSize.l5desc);  
+
+        sizeSearchGrid.dataSource.data([]);
+        sizeSearchWindow.close();
+
+        if (selectedScanOption == ScanOption.After) {
+            $("#barcodeQuantityTxt").val("");
+            $("#barcodeBcodeTxt").val("");
+            $("#barcodeBcodeTxt").removeAttr("disabled");
+            scannedBarcode = null;
+            isValidBarcode = false;//to block function key behaviour
+            $("#barcodeBcodeTxt").focus();
+        }
+        else if (selectedScanOption == ScanOption.Continue) {
+            scannedBarcode = null;
+            isValidBarcode = false;//to block function key behaviour
+            $("#barcodeQuantityTxt").val("");
+            $("#barcodeBcodeTxt").val("");
+            $("#barcodeBcodeTxt").focus();
+        }
+        
+        $('#scheduleDataLabel').html("");
+        $('#bcstyleDataLabel').html("");
+        $('#dataLabelzFeature').html("");
+        $('#bcsizeDataLabel').html("");
+        $('#bcColorDataLabel').html("");
+        $('#remainingQtyLabel').html(""); 
+    }
+
+    function onSizeSearchClose() {
+        if (selectedSize != null) {
+            $("#barcodeSizeTxt").val(selectedSize.l5no);
+            $('#sizeDataLabel').html(selectedSize.l5desc);
+
+            refresValuesonChangeSize();
+        }
+        else {
+            $("#barcodeSizeTxt").val("");
+            $('#sizeDataLabel').html("");
+        }
+        $("#sizeSearchWindowStyleTxt").val("");
+        sizeSearchGrid.dataSource.data([]);
+    }
+
+    //Embedded to Size Search
+    function refresValuesonChangeSize() {
+        refreshmsgBoxHeaderStyle();
+        resetControls();
+        if (clientconfig.wfdepinstId != 0) {
+            // console.log('Calling GetWFConfigurationbyWFOpp by WFId:' + wfid + ', OperationCode:' + clientconfig.opCode1 + ', TeamId:' + clientconfig.teamId);
+            $.ajax({
+                url: '@ViewBag.APIURL/Lookup/GetConfigurationWFDEPInstId?WFDEPInstId=' + clientconfig.wfdepinstId,  
+                //url: '@ViewBag.APIURL/Lookup/GetWFConfigurationbyWFOpp?WFId=' + wfid + '&OperationCode=' + clientconfig.opCode1 + '&TeamId=' + clientconfig.teamId,
+                type: 'GET',
+                dataType: 'json',
+                async: false,
+                contentType: 'application/json; charset=utf-8',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (data) {
+                    //Check whether barcode is exist in the db
+                    //console.log('Calling GetWFConfigurationbyWFOpp succeded.');
+                    if (data != null) {
+                        //console.log('GetWFConfigurationbyWFOpp API result received from DCAP db..');
+                        //console.log(data);
+                        sessionStorage.setItem("ScanOpMode", data.scanOpMode);
+                        selectedWfConfig = data;
+                        
+                        initializeDivisons();
+
+                        clientconfig = {
+                            "clientId": clientconfig.clientId,
+                            "dataCaptureMode": clientconfig.dataCaptureMode,
+                            "pocounterNumber" : clientconfig.pocounterNumber,
+                            "facName": clientconfig.facName,
+                            "loginMode": clientconfig.loginMode,
+                            "opCode1": clientconfig.opCode1,
+                            "opCode2": clientconfig.opCode2,
+                            "operationName": clientconfig.operationName,
+                            "recStatus": clientconfig.recStatus,
+                            "selectMode": clientconfig.selectMode,
+                            "teamId": clientconfig.teamId,
+                            "teamName": clientconfig.teamName,
+                            "facName": clientconfig.facName,
+                            "wfdepinstId": selectedWfConfig.wfdepinstId,
+                            "wfId": clientconfig.wfId,
+                            "clientIP": clientconfig.clientIP
+                        };
+
+
+                        setClientConfigInfo();
+
+                        if (data.scanOpMode == ScanOption.Continue) {
+                            selectedScanOption = ScanOption.Continue;
+                            $('#trxModeBtnPanel').show();
+                            $('#scanActionButton').show();
+                            //$('#dataLabelScanOpt').html('Continue');
+                            var LblVal = clientconfig.operationName + ' / Continue'
+                            $('#dataLabelOperation').html(LblVal);
+                            $('#helpSin').html("ස්කෑන් කිරීමට පෙර ස්කෑන් ක්‍රමය සහ ස්කෑන් අකාරය තෝරන්න.");
+                            $('#helpEng').html("Select Scan Action and Transaction before scanning the barcode.");
+                            //$('#barcodeBcodeTxt').attr("disabled", "disabled");
+                            //$("#barcodeQuantityTxt").attr("disabled", "disabled");
+                        }
+                        else if (data.scanOpMode == ScanOption.Before) {
+                            selectedScanOption = ScanOption.Before;
+                            $('#trxModeBtnPanel').show();
+                            $('#scanActionButton').show();
+                            //$('#dataLabelScanOpt').html('Before'); 
+                            var LblVal1 = clientconfig.operationName + ' / Before'
+                            $('#dataLabelOperation').html(LblVal1);
+                            $('#helpSin').html("ස්කෑන් කිරීමට පෙර ස්කෑන් ක්‍රමය සහ ස්කෑන් අකාරය තෝරන්න.");
+                            $('#helpEng').html("Select Scan Action and Transaction before scanning the barcode.");
+                        }
+                        else if (data.scanOpMode == ScanOption.After) {
+                            selectedScanOption = ScanOption.After;
+                            $('#trxModeBtnPanel').show();
+                            $('#scanActionButton').show();
+                            //$('#dataLabelScanOpt').html('After');
+                            var LblVal2 = clientconfig.operationName + ' / After'
+                            $('#dataLabelOperation').html(LblVal2);
+                            $('#trxModeReworkBtn').attr("disabled", "disabled");
+                            $('#trxModeGoodBtn').attr("disabled", "disabled");
+                            $('#trxModeScrapBtn').attr("disabled", "disabled");
+                            //$('#helpSin').html("ස්කෑන් කිරීමෙන් පසු ස්කෑන් ක්‍රමය සහ ස්කෑන් අකාරය තෝරන්න.");
+                            //$('#helpEng').html("Select Scan Action and Transaction after scanning the barcode.");
+                            $("#barcodeQuantityTxt").removeAttr("disabled");
+                            $("#barcodeBcodeTxt").removeAttr("disabled");
+                            $("#barcodeBcodeTxt").focus();
+                        }
+
+                        if (data.poCounterEnable == 1) {
+                            $('#counterLables').show();
+                            loadPOcounterValues();
+                        }
+                        else {
+                            $('#counterLables').hide();
+                        }
+
+                        //Don't change below order as default has to be set for "Add"
+                        if (userPermissionList.some(permission => permission.functionId === AccessibleFunctions.GoodReverse)) {
+                            $('#trxModeGoodBtn').show();
+                            $('#scanActionReverseBtn').show();
+
+                            selectActionReverse();
+                        }
+                        if (userPermissionList.some(permission => permission.functionId === AccessibleFunctions.GoodAdd)) {
+                            $('#trxModeGoodBtn').show();
+                            $('#scanActionAddBtn').show();
+
+                            selectActionAdd();
+                        }
+                        //console.log('Calling GetWFDetailByID API by wfid:' + wfid);
+                        if(wfid == null)
+                             wfid = clientconfig.wfId
+
+                        $.ajax({
+                            url: '@ViewBag.APIURL/Lookup/GetWFDetailByID?WFId=' + wfid,
+                            type: 'GET',
+                            dataType: 'json',
+                            async: false,
+                            contentType: 'application/json; charset=utf-8',
+                            beforeSend: function () {
+                                $("#ajaxBusy").show();
+                            },
+                            complete: function () {
+                                $("#ajaxBusy").hide();
+                            },
+                            success: function (data) {
+                                //console.log('Calling GetWFDetailByID API succeded.');
+                                if (data != null) {
+                                    //console.log('GetWFDetailByID API result received from DCAP db..');
+                                    selectedWorkflow = data;
+                                    //console.log(selectedWorkflow);
+                                }
+                                else {
+                                    msgBox.show('කාර්ය ප්‍රවාහයට අදාල තොරතුරු නැත. කරුණාකර තොරතුරු තාක්ෂණ නිලධාරියෙකු අමතන්න.',
+                                        'Workflow details not found. Please contact a IT helpdesk officer',
+                                        'අවවාදයයි / Warning',
+                                        'BS22',
+                                        'Warning',
+                                        null);
+                                }
+
+                            },
+                            error: function (jqXHR, textStatus, errorThrown) {
+                                formatErrorMessage(jqXHR, errorThrown, "CreateBulkBagBarcode");
+                            }
+                        });
+                    }
+                    else {
+                        //console.log('No configuration details available for selected style.');
+                        msgBox.show('තෝරන ලද ස්ටයිල් සඳහා වින්‍යාස තොරතුරු නොමැත. කරුණාකර තොරතුරු තාක්ෂණ නිලධාරියෙකු අමතන්න.',
+                            'No configuration details available for selected style. Please contact a IT helpdesk officer',
+                            'අවවාදයයි / Warning',
+                            'BS23',
+                            'Warning',
+                            null);
+                    }
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "CreateBulkBagBarcode");
+                }
+            });
+        }
+    }
+
+    
+    //Action Buttons: START
+    function selectActionAdd() {
+        refreshmsgBoxHeaderStyle();
+        if (selectedStyle == null)
+            return;
+
+        if ((userPermissionList.some(permission => permission.functionId === AccessibleFunctions.GoodAdd)) ||
+            (userPermissionList.some(permission => permission.functionId === AccessibleFunctions.ScrapAdd)) ||
+            (userPermissionList.some(permission => permission.functionId === AccessibleFunctions.ReworkAdd))
+        ) {
+            $('#scanActionAddBtn').addClass('bs-buttonPressed-action');
+            $('#scanActionAddBtn').removeClass('bs-btn-primary-action');
+            $('#scanActionReverseBtn').addClass('bs-btn-primary-action');
+            $('#scanActionReverseBtn').removeClass('bs-buttonPressed-action');
+
+            selectedScanAction = Action.Add;
+        }
+        else {
+            msgBox.show('ඔබට ඇඩ් කිරීම සඳහා අවසර නැත.', 'You do not have permission for "Add".', 'අවවාදයයි / Warning', 'BS08', 'Warning', null);
+        }
+    }
+
+    function selectActionReverse() {
+        refreshmsgBoxHeaderStyle();
+        if (selectedStyle == null)
+            return;
+
+        if ((userPermissionList.some(permission => permission.functionId === AccessibleFunctions.GoodReverse)) ||
+            (userPermissionList.some(permission => permission.functionId === AccessibleFunctions.ScrapReverse)) ||
+            (userPermissionList.some(permission => permission.functionId === AccessibleFunctions.ReworkReverse))) {
+
+            $('#scanActionAddBtn').addClass('bs-btn-primary-action');
+            $('#scanActionAddBtn').removeClass('bs-buttonPressed-action');
+            $('#scanActionReverseBtn').addClass('bs-buttonPressed-action');
+            $('#scanActionReverseBtn').removeClass('bs-btn-primary-action');
+
+            selectedScanAction = Action.Reverse;
+        }
+        else {
+            msgBox.show('ඔබට රිවර්ස් කිරීම සඳහා අවසර නැත.', 'You do not have permission for "Reverse".', 'අවවාදයයි / Warning', 'BS09', 'Warning', null);
+        }
+    } 
+    //Action Buttons: END
+    //Embedded Selection Controllers : END
+
+    function onchangeBarcode() {
+        $("#barcodeBcodeTxt").attr("disabled", "disabled");
+        $("#barcodeQuantityTxt").removeAttr("disabled");
+        $("#barcodeQuantityTxt").select();
+        $("#barcodeQuantityTxt").focus();
+    }
+
+    function initializeDivisons() {
+        if(selectedWfConfig.poCounterEnable == 1){
+            $("#pocounterdiv").show();
+        } else {
+           $("#pocounterdiv").hide(); 
+        }
+
+        if(selectedWfConfig.poCounterNumber == 0) {
+            $("#bagbarcode-row").hide();
+            $("#bagqty-row").hide();
+
+            $("#pocounter-action-buttons").show();
+            $("#bagcounter-action-buttons").hide();
+        } else {
+            $("#bagbarcode-row").show();
+            $("#bagqty-row").show();
+
+            $("#pocounter-action-buttons").hide();
+            $("#bagcounter-action-buttons").show();
+        }
+    }
+
+    function getSessionInfo() {
+        isValidClient = sessionStorage.getItem("IsValidClient");
+        clientconfig = JSON.parse(sessionStorage.getItem("Clientconfig"));
+        userPermissionList = JSON.parse(sessionStorage.getItem("UserPermissionList"));
+        clientIP = sessionStorage.getItem("ClientIP");
+        txUser = JSON.parse(sessionStorage.getItem("TxUser"));
+        //console.log('Called getSessionInfo method. IsValidClient = ' + isValidClient);
+    }
+
+    function checkLoginStatus() {
+        //console.log('Called checkLoginStatus method. IsSignedIn = ' + sessionStorage.getItem("IsSignedIn"));
+        if (sessionStorage.getItem("UserId") != "") {
+            $("#toolBarLoggedinUser").html(sessionStorage.getItem("UserId"));
+        } else {
+            $("#toolBarLoggedinUser").html("");
+        }
+        if (sessionStorage.getItem("IsSignedIn") == Answer.Null || sessionStorage.getItem("IsSignedIn") == Answer.No) {
+            $("#loginBar").hide();
+            window.location.href = "Login";
+        } else {
+            $("#loginBar").show();
+        }
+    }
+
+    function setClientConfigInfo() {
+        if(clientconfig.wfId == 0) {
+            $('#main').hide();
+            msgBox.show('Bulk බෑග් සෑදීමට ඔබට අවසර නැත.', 'you don not have permission to create bulk bags.', 'අවවාදයයි / Warning', 'BS01', 'Warning', function(){window.location.href = "Menu";});
+            //window.location.href = "Menu";
+        }
+
+        $('#dataLabelFactory').html(clientconfig.facName);
+        $('#dataLabelTeam').html(clientconfig.teamName + '-[' + clientconfig.wfdepinstId + ']');
+        //$('#dataLabelOperation').html(clientconfig.operationName);
+        $('#dataLabelOperation').html(clientconfig.operationName);
+        $('#dataLabelClientIP').html(clientIP);
+    }
+
+    function setPageControlsStartupStatus() {
+        $('#trxModeBtnPanel').hide();
+        $('#divScrapReason').hide();
+        $('#scanActionButton').hide();
+        $('#trxModeGoodBtn').hide();
+        $('#trxModeScrapBtn').hide();
+        $('#trxModeReworkBtn').hide();
+        $('#scanActionAddBtn').hide();
+        $('#scanActionReverseBtn').hide();
+        $('#scannedCountDataLabel').html(scannedCount);
+        $("#barcodeBcodeTxt").attr("disabled", "disabled");
+        $("#barcodeQuantityTxt").attr("disabled", "disabled");
+        $('#scannedStatusDataLabel').html("");
+        $('#lastBarcodeDataLabel').html("");
+        $('#lastAction').html("");
+        $('#lastTxMode').html("");
+
+        //Added during "After"
+        $("#barcodeStyleTxt").val("");
+        $("#styleDataLabel").html("");
+        $("#barcodeColorTxt").val("");
+        $("#colorDataLabel").html("");
+
+        $("#pocounterdiv").hide();
+
+        selectedStyle = null;
+        selectedShedule = null;
+        selectedColor = null;
+        selectedSize = null;
+        selectedScanCounterId = null;
+    }
+
+    function setPageControlsFunctionStartupStatus() {
+        $('#scanActionButton').hide();
+        $('#scanActionAddBtn').hide();
+        $('#scanActionReverseBtn').hide();
+        $('#scannedCountDataLabel').html(scannedCount);
+        $("#barcodeQuantityTxt").attr("disabled", "disabled");
+        $("#barcodeBcodeTxt").attr("disabled", "disabled");
+        $('#scannedStatusDataLabel').html("");
+        $('#lastBarcodeDataLabel').html("");
+        $('#lastAction').html("");
+        $('#lastTxMode').html("");
+
+        //Added during "After"
+
+        $("#pocounterdiv").hide();
+
+        selectedScanCounterId = null;
+    }
+
+    function initializeFunctionKeys() {
+
+        shortcut.add("F5", function () {
+            selectActionAdd();
+            if (selectedScanOption == ScanOption.Continue) {
+                $("#barcodeBcodeTxt").focus();
+            }
+        });
+        shortcut.add("F6", function () {
+            selectActionReverse();
+            if (selectedScanOption == ScanOption.Continue) {
+                $("#barcodeBcodeTxt").focus();
+            }
+        });
+        shortcut.add("F10", function () {
+            $('#resetBtn').trigger('click');
+        });
+    }
+
+    function disableFunctionKeys(e) {
+        var functionKeys = new Array(112, 113, 114, 115, 117, 118, 119, 120, 121);
+        if (functionKeys.indexOf(e.keyCode) > -1 || functionKeys.indexOf(e.which) > -1) {
+            e.preventDefault();
+        }
+    }
+
+    function populatePermissionList() {
+
+        userPermissionList = JSON.parse(sessionStorage.getItem("UserPermissionList"));
+        //console.log('Called populatePermissionList method. List is..');
+        //console.log(userPermissionList);
+        var uniqueUserPermissionList = [];
+        for (i = 0; i < userPermissionList.length; i++) {
+            if (uniqueUserPermissionList.indexOf(userPermissionList[i].funcName) === -1) {
+                uniqueUserPermissionList.push(userPermissionList[i].funcName);
+                $('#userpermissionlist').append('<div class="row"><label class="control-datalabel">' + userPermissionList[i].funcName + '</label></div>');
+            }
+        }
+    }
+
+    function getOperation() {
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetOpperationsByUser?UserId=' + txUser.userId + '&ClientIp=' +  clientconfig.clientIP ,
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                operationList = response;
+                $("#ddlMainOperation").data("kendoDropDownList").dataSource.data([]);
+                $("#ddlMainOperation").kendoDropDownList({
+                    dataTextField: "displayVal",
+                    dataValueField: "valueField",                   
+                    dataSource: response,
+                    index: 0,
+                    autoBind: true,
+                    optionLabel: {
+                        displayVal: "Select Operation",
+                        valueField: 0
+                    },
+                    change: function (e) {
+                        operationChange();
+
+                    }
+                });
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "CreateBulkBagBarcode");
+            }
+        });
+    }
+
+    function setMainOperationVisibility() {
+        if (clientconfig.teamId == 0 || clientconfig.teamId == null) {
+            $('#dvMainOpp').show();
+        }
+        else {
+            $("#ddlMainOperation").data("kendoDropDownList").dataSource.data([]);
+            $('#dvMainOpp').hide();
+        }
+    } 
+
+    //Document Ready Function: END
+
+    //Scan Controllers: START
+    function checkBarcodeIsValid() {
+        DisableControllers();
+        if(!haltsystem) {
+            refreshmsgBoxHeaderStyle();
+            sacanComplete = true;
+            errorbeforestauscomplete = '';
+            $('#scannedStatusDataLabel').html('');
+            var StyleNo = "";
+            //console.log('Calling GetStyleScheduleByBarcode API by Barcode:' + $("#barcodeBcodeTxt").val());
+        
+            $.ajax({
+                url: '@ViewBag.APIURL/Lookup/CheckForBagBarcode?bagbarcode=' + $("#barcodeBcodeTxt").val() + '&mode=3',
+                type: 'GET',
+                dataType: 'json',
+                //async: false,
+                contentType: 'application/json; charset=utf-8',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (data) {
+                    //console.log("Calling GetStyleScheduleByBarcode API succeded")
+                    //If the barcode is exist in the db
+                    if (data != null) {
+                        //console.log('Barcode ' + $("#barcodeBcodeTxt").val() + ' exists. Returned value..');
+                        //console.log(data);
+
+                        scannedBarcode = data;
+                        
+                        //Check whether barcode is valid with the user input
+                        if (data) {
+                            $.ajax({
+                                url: '@ViewBag.APIURL/Lookup/CheckForBagBarcode?bagbarcode=' + $("#barcodeBcodeTxt").val() + '&mode=1',
+                                type: 'GET',
+                                dataType: 'json',
+                                async: false,
+                                contentType: 'application/json; charset=utf-8',
+                                beforeSend: function () {
+                                    $("#ajaxBusy").show();
+                                },
+                                complete: function () {
+                                    $("#ajaxBusy").hide();
+                                },
+                                success: function (data) {
+                                    if(data != null) {
+                                        if(data) {
+                                            isValidBarcode = true;
+                                            $('#scheduleDataLabel').html($('#barcodeSheduleTxt').val());
+                                            $('#bcstyleDataLabel').html($('#barcodeStyleTxt').val());
+                                            $('#dataLabelzFeature').html($('#sheduleDataLabel').html());
+                                            $('#bcsizeDataLabel').html($('#sizeDataLabel').html());
+                                            $('#bcColorDataLabel').html($('#colorDataLabel').html());
+                                            $('#remainingQtyLabel').html(100);       
+
+                                            if (selectedScanOption == ScanOption.After) {
+                                                $("#barcodeBcodeTxt").attr("disabled", "disabled");
+                                                $("#barcodeQuantityTxt").attr("disabled", "disabled");
+                                                $('#scannedStatusDataLabel').html("");
+                                                EnableControllers();
+                                            }
+                                            else if (selectedScanOption == ScanOption.Continue) {
+                                                updateBarcodeScan();
+                                            }
+                                                    
+                                            beeponce();
+                                        } else {
+                                            $.ajax({
+                                                url: '@ViewBag.APIURL/Lookup/CheckForBagBarcodeExistence?bagbarcode=' + $("#barcodeBcodeTxt").val() + '&mode=1&l1id=' + selectedStyle.l1id + '&l2id=' + selectedShedule.l2id + '&l4id=' + selectedColor.l4id + '&l5id=' + selectedSize.l5id,
+                                                type: 'GET',
+                                                dataType: 'json',
+                                                async: false,
+                                                contentType: 'application/json; charset=utf-8',
+                                                beforeSend: function () {
+                                                    $("#ajaxBusy").show();
+                                                },
+                                                complete: function () {
+                                                    $("#ajaxBusy").hide();
+                                                },
+                                                success: function (data) {
+                                                    //console.log("output from API CheckForBagBarcodeExistence",data);
+                                                    if(data != null) {
+                                                        if(data == 2) {
+                                                            isValidBarcode = true;
+                                                            $('#scheduleDataLabel').html($('#barcodeSheduleTxt').val());
+                                                            $('#bcstyleDataLabel').html($('#barcodeStyleTxt').val());
+                                                            $('#dataLabelzFeature').html($('#sheduleDataLabel').html());
+                                                            $('#bcsizeDataLabel').html($('#sizeDataLabel').html());
+                                                            $('#bcColorDataLabel').html($('#colorDataLabel').html());
+                                                            $('#remainingQtyLabel').html(100);       
+
+                                                            if (selectedScanOption == ScanOption.After) {
+                                                                $("#barcodeBcodeTxt").attr("disabled", "disabled");
+                                                                $("#barcodeQuantityTxt").attr("disabled", "disabled");
+                                                                $('#scannedStatusDataLabel').html("");
+                                                                EnableControllers();
+                                                            }
+                                                            else if (selectedScanOption == ScanOption.Continue) {
+                                                                updateBarcodeScan();
+                                                            }
+                                                        } else if(data == 3) {
+                                                            msgBoxConfirm.show('බෑග් තීරු කේතය දැනටමත් බෑග් ඉන්වෙන්ටරියේ ඇත. ඔබට වෙනස් කිරීමට අවශ්‍යද?. ඉදිරියට යන්න ..',
+                                                                'The bag barcode is already in the bag inventory. Do you want to modify?, continue ..',
+                                                                'තහවුරු කරන්න / Confirm',
+                                                                'BS24',
+                                                                'Confirm',
+                                                                function () {
+                                                                    isValidBarcode = true;
+                                                                    $('#bcstyleDataLabel').html($('#barcodeStyleTxt').val());
+                                                                    $('#scheduleDataLabel').html($('#barcodeSheduleTxt').val());
+                                                                    $('#dataLabelzFeature').html($('#sheduleDataLabel').html());
+                                                                    $('#bcsizeDataLabel').html($('#sizeDataLabel').html());
+                                                                    $('#bcColorDataLabel').html($('#colorDataLabel').html());
+                                                                    $('#remainingQtyLabel').html(100);       
+
+                                                                    if (selectedScanOption == ScanOption.After) {
+                                                                        $("#barcodeBcodeTxt").attr("disabled", "disabled");
+                                                                        $("#barcodeQuantityTxt").attr("disabled", "disabled");
+                                                                        $('#scannedStatusDataLabel').html("");
+                                                                        EnableControllers();
+                                                                    }
+                                                                    else if (selectedScanOption == ScanOption.Continue) {
+                                                                        updateBarcodeScan();
+                                                                    }
+                                                                },
+                                                                function () {
+                                                                    $("#barcodeQuantityTxt").val("");
+                                                                    $("#barcodeBcodeTxt").val("");
+                                                                    $("#barcodeBcodeTxt").focus();
+                                                                    errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Shedule conffirmation : cancelled.'
+                                                                    sacanComplete = false;
+                                                                    EnableControllers();
+                                                                    return;
+                                                                });
+                                                                    
+                                                                beeponce(); 
+
+                                                        } else {
+                                                            msgBox.show('තෝරාගත් ස්ටයිල්ය, ෂෙඩියුල්, වර්ණය, ප්‍රමාණය දැනටමත් ඉන්වෙන්ටරියේ ඇති බෑග් තීරු කේතයට නොගැලපේ.', 'Selected style, schedule, color, size does not match the bag barcode already in the inventory.', 'අවවාදයයි / Warning', 'BS12', 'Warning');
+                                                            $("#barcodeQuantityTxt").val("");
+                                                            $("#barcodeBcodeTxt").val("");
+                                                            $("#barcodeBcodeTxt").focus();
+                                                            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Shedule conffirmation : cancelled.'
+                                                            sacanComplete = false;
+                                                            EnableControllers();
+                                                            return;
+                                                        }
+
+                                                    }
+                                                },
+                                                error: function (jqXHR, textStatus, errorThrown) {
+                                                    formatErrorMessage(jqXHR, errorThrown, "CreateBulkBagBarcode");
+                                                    errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Get Shedulle by Barcode API Error.'
+                                                    sacanComplete = false;
+                                                    EnableControllers();
+                                                }
+                                            });
+                                        }
+                                    }
+
+                                },
+                                error: function (jqXHR, textStatus, errorThrown) {
+                                    formatErrorMessage(jqXHR, errorThrown, "CreateBulkBagBarcode");
+                                    errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Get Shedulle by Barcode API Error.'
+                                    sacanComplete = false;
+                                    EnableControllers();
+                                }
+                            });                      
+                        }
+                        else {
+                            msgBox.show('තීරු කේතය දැනටමත් භාවිතා කර ඇත.', 'The barcode is already used.', 'අවවාදයයි / Warning', 'BS12', 'Warning');
+                            $("#barcodeQuantityTxt").val("");
+                            $("#barcodeBcodeTxt").val("");
+                            $("#barcodeBcodeTxt").focus();
+                            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Shedule conffirmation : cancelled.'
+                            sacanComplete = false;
+                            EnableControllers();
+                            return;
+                        }
+                    }
+                    else {
+                        //console.log('Barcode ' + $("#barcodeBcodeTxt").val() + ' not exists.');
+                        isValidBarcode = false;
+                        msgBox.show('මෙම බාර්කෝඩ් අගය වලංගු නැත.', 'This barcode is not valid.', 'අවවාදයයි / Warning', 'BS12', 'Warning', function () {
+                            scannedBarcode = null;
+                            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'This barcode is not valid.'
+                            sacanComplete = false;
+                            EnableControllers();
+                            $("#barcodeQuantityTxt").val("");
+                            $("#barcodeBcodeTxt").val("");
+                            $("#barcodeBcodeTxt").focus();
+                        });
+                    }
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "CreateBulkBagBarcode");
+                    errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Get Shedulle by Barcode API Error.'
+                    sacanComplete = false;
+                    EnableControllers();
+                }
+            });
+        } else {
+            msgBox.show('ස්කෑන් පද්ධතිය නවතා දමා ඇත. කවුන්ටර හෝ වෙනත් වලංගු කිරීම් සඳහා පරීක්ෂා කරන්න',
+                        'The scan system is on halt. check for counter or other validations',
+                        'අවවාදයයි / Warning',
+                        'BS22',
+                        'Warning',
+                        null);
+            $("#barcodeQuantityTxt").val("");
+            $('#barcodeBcodeTxt').val('');
+            $('#barcodeBcodeTxt').focus();
+            EnableControllers();
+        }      
+    }
+
+    function updateBarcodeScan() {
+        refreshmsgBoxHeaderStyle();
+        var UserInList = [];
+
+        if (selectedScanAction == Answer.Null) {
+            EnableControllers();
+            return;
+            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'selected Scan Action Answer in null.'
+            sacanComplete = false;
+        }
+
+        goodQty = 0;
+
+        if($("#barcodeQuantityTxt").val() != "") {
+            if(!isNaN($("#barcodeQuantityTxt").val())) {
+                if (parseInt($("#barcodeQuantityTxt").val()) != 0) {
+                    goodQty = parseInt($("#barcodeQuantityTxt").val());   
+                } else {
+                    msgBox.show('ප්‍රමාණාත්මකව 0 භාවිතා කළ නොහැක. නැවත පරීක්ෂා කරන්න.', 'Cannot use 0 as a quantitiy', 'අවවාදයයි / Warning', 'BS15', 'Warning', function () {
+                        $('#barcodeQuantityTxt').focus();
+                    });
+                    errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Cannot use 0 as a quantitiy.'
+                    sacanComplete = false;
+                    EnableControllers();
+                    return;
+                }
+            } else {
+                msgBox.show('කරුණාකර ප්‍රමාණාත්මක ආදානය සඳහා වලංගු අගයක් ඇතුළත් කරන්න.', 'Please enter a valid value for quantitiy.', 'අවවාදයයි / Warning', 'BS15', 'Warning', function () {
+                    $('#barcodeQuantityTxt').focus();
+                });
+                errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Cannot use 0 as a quantitiy.'
+                sacanComplete = false;
+                EnableControllers();
+                return;
+            }
+        } else {
+            msgBox.show('කරුණාකර ප්‍රමාණාත්මක ආදානය සඳහා වලංගු අගයක් ඇතුළත් කරන්න.', 'Please enter a valid value for quantitiy.', 'අවවාදයයි / Warning', 'BS15', 'Warning', function () {
+                $('#barcodeQuantityTxt').focus();
+            });
+            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Cannot use 0 as a quantitiy.'
+            sacanComplete = false;
+            EnableControllers();
+            return;
+        }
+
+        //console.log('Called updateBarcodeScan method');
+
+        if (selectedScanAction == Action.Add) {
+            //console.log('SelectedTrxMode : Good , SelectedScanAction : Add');
+            selectedFunction = AccessibleFunctions.GoodAdd;
+        }
+        else if (selectedScanAction == Action.Reverse) {
+            //console.log('SelectedTrxMode : Good , SelectedScanAction : Reverse');
+            selectedFunction = AccessibleFunctions.GoodReverse;
+        }
+
+        var selectedUserPermission = $.grep(userPermissionList, function (h) {
+            return h.functionId == selectedFunction
+        });
+
+        //Check whether barcode remaining quantitiy is matched with the user input 
+        if (goodQty > parseInt($('#remainingQtyLabel').html())) {
+            msgBox.show('කපන ලද ප්‍රමාණයට සාපේක්ෂව වෙන් කිරීමට තවත් ඇඟලුම් තිබිය නොහැක.', 'There can be no more garments to allocate relative to the cut quantity.', 'අවවාදයයි / Warning', 'BS15', 'Warning', function () {
+                $('#styleSearchBtn').focus();
+            });
+            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'There can be no more garments to allocate relative to the cut quantity.'
+            sacanComplete = false;
+            EnableControllers();
+            return;
+        }
+
+        //Scan Option is set to Before but user has not selected either Scan Action and the Transaction Mode or both
+        else if ((selectedScanOption == ScanOption.Before) &&
+            ((selectedScanAction == Action.Non))) {
+            msgBox.show('කරුණාකර ස්කෑන් ක්‍රමය තෝරන්න.', 'Please select Scan Action.', 'අවවාදයයි / Warning', 'BS17', 'Warning', null);
+            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Please select Scan Action.'
+            sacanComplete = false;
+            EnableControllers();
+            return;
+        }
+        //Scan Option is set to Continue but user has not selected Scan Action and the Transaction Mode
+        else if ((selectedScanOption == ScanOption.Continue) &&
+            ((selectedScanAction == Action.Non))) {
+            msgBox.show('කරුණාකර ස්කෑන් ක්‍රමය තෝරන්න.', 'Please select Scan Action.', 'අවවාදයයි / Warning', 'BS18', 'Warning', null);
+            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Please select Scan Action.'
+            sacanComplete = false;
+            EnableControllers();
+            return;
+        }
+        else if (!userPermissionList.some(permission => permission.functionId === selectedFunction)) {
+            msgBox.show('ඔබට තෝරන ලද ස්කෑන් ක්‍රමය අවසර නැත.', 'You do not have access to selected Scan Action.', 'අවවාදයයි / Warning', 'BS19', 'Warning', null);
+            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'You do not have access to selected Scan Action.'
+            sacanComplete = false;
+            EnableControllers();
+            return;
+        }
+        else if (!(selectedUserPermission.some(permission => permission.sbuCode === selectedWorkflow.sbucode)) &&
+            !(selectedUserPermission.some(permission => permission.facCode === selectedWorkflow.facCode)) &&
+            !(selectedUserPermission.some(permission => permission.depId === clientconfig.opCode1))) {
+            msgBox.show('තෝරන ලද SBU Code - ' + selectedWorkflow.sbucode + ' Factory Code - ' + selectedWorkflow.facCode + ' Operation Code - ' + clientconfig.opCode1 + ' සඳහා ඔබට අවසර නැත.', 'You do not have access to selected SBU Code - ' + selectedWorkflow.sbucode + ' Factory Code - ' + selectedWorkflow.facCode + ' Operation Code - ' + clientconfig.opCode1 + '.', 'අවවාදයයි / Warning', 'BS21', 'Warning', null);
+            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'You do not have access to selected SBU Code.'
+            sacanComplete = false;
+            EnableControllers();
+            return;
+        }
+
+        else {
+            if (selectedScanAction == Action.Add) {
+                var plussminus = 1;
+            }
+            else if (selectedScanAction == Action.Reverse) {
+                var plussminus = 2;
+            }
+
+            var ScannedItem = {
+                "WfdepinstId": selectedWfConfig.wfdepinstId,
+                "WFID": wfid,
+                "FacCode": selectedWorkflow.facCode,
+                "Sbucode": selectedWorkflow.sbucode,
+                "GroupCode": selectedWorkflow.groupCode,
+                "StyleId": selectedStyle.l1id,
+                "ScheduleId": selectedShedule.l2id,
+                "ColorId": selectedColor.l4id,
+                "ColorIdUI": 0,
+                "SizeId": selectedSize.l5id,
+                "EnteredQtyGd": (plussminus === 1 ? goodQty : goodQty * -1),
+                "EnteredQtyScrap": 0,
+                "EnteredQtyRw": 0,
+                "Barcode": $("#barcodeBcodeTxt").val(),
+                "BagBarCodeNo": $("#barcodeBcodeTxt").val(),
+                "CounterNumber": 0,
+                "BagSize": 100,
+                "BagStatus": 1,
+                "HourNo": 0,
+                "RRId": null,
+                "DOpsId": null,
+                "JobNo": "",
+                "CreatedBy": txUser.userId,
+                "TeamId": selectedWfConfig.teamId,
+                "CreatedMachine": clientconfig.clientId,
+                "TxnMode": selectedTrxMode,
+                "PlussMinus": plussminus,
+                "OperationCode": clientconfig.opCode1
+            };
+
+            //console.log('Assigning Bag Barcode Details');
+            
+            //console.log('Scanned Item (Sent to DCAP db)..');
+            //console.log(ScannedItem);
+            UserInList.push(ScannedItem);
+            $('#lastBarcodeDataLabel').html($("#barcodeBcodeTxt").val());
+
+            sentToDCAPdb(UserInList);
+        }
+    }
+
+    //Search function to search to arrays
+    function search(user){
+        return Object.keys(this).every((key) => user[key] === this[key]);
+    }
+    //Check For Ongoing Bags in Live Conter : END
+
+    //Get Array max value
+    function sortByAttribue(arr, attribute) {
+        return arr.sort(function(a,b) { 
+            return a[attribute] > b[attribute];
+        });
+    }
+
+    function sentToDCAPdb(UserInList){
+        refreshmsgBoxHeaderStyle();
+        if ($("#barcodeBcodeTxt").val() != "") {
+            if (flag) {
+                $.ajax({
+                    url: '@ViewBag.APIURL/BusinessLogics/UpdateNonApparelGroupBarcode',
+                    type: 'POST',
+                    dataType: 'json',
+                    async: false,
+                    data: JSON.stringify(UserInList),
+                    contentType: 'application/json; charset=utf-8',
+                    beforeSend: function () {
+                        $("#ajaxBusy").show();
+                        flag = false;
+                    },
+                    complete: function () {
+                        $("#ajaxBusy").hide();
+                        flag = true;
+                    },
+                    success: function (data) {
+                        //Check whether barcode is exist in the db
+                        //console.log('Calling UpdateBCScanData API succeded.');
+                        if (data[0] != null) {
+                            //console.log('UpdateBCScanData API result received from DCAP db..');
+                            //console.log(data[0]);
+                            if (data[0].saveSuccessfull) {
+                                finalizeBarcodeUpdate(data[0]);
+                                EnableControllers();
+                            } else {
+                                $('#scannedStatusDataLabel').removeClass('control-datalabel-scannedstatus-pass');
+                                $('#scannedStatusDataLabel').addClass('blinktext');
+                                $('#scannedStatusDataLabel').addClass('control-datalabel-scannedstatus-fail');
+                                $('#scannedStatusDataLabel').html('Fail');
+
+                                scannedStatus = ScannedStatus.Fail;
+                                msgBox.show('', data[0].responce[1], 'අවවාදයයි / Warning', 'APIERR01', 'Warning', function () {
+                                    if (selectedScanOption == ScanOption.After || selectedScanOption == ScanOption.Continue) {
+                                        $("#barcodeQuantityTxt").val("");
+                                        $("#barcodeBcodeTxt").val("");
+                                        $("#barcodeBcodeTxt").focus();
+                                    }
+                                    if (selectedScanOption == ScanOption.Continue || selectedScanOption == ScanOption.After) {
+                                        isValidBarcode = false;
+                                    }
+                                });
+                                EnableControllers();
+                            }
+
+                        } else {
+                            $('#scannedStatusDataLabel').removeClass('control-datalabel-scannedstatus-pass');
+                            $('#scannedStatusDataLabel').addClass('blinktext');
+                            $('#scannedStatusDataLabel').addClass('control-datalabel-scannedstatus-fail');
+                            $('#scannedStatusDataLabel').html('Fail');
+
+                            scannedStatus = ScannedStatus.Fail;
+                            msgBox.show('', 'Error in Save', 'අවවාදයයි / Warning', 'APIERR02', 'Warning', function () {
+                                if (selectedScanOption == ScanOption.After || selectedScanOption == ScanOption.Continue) {
+                                    $("#barcodeQuantityTxt").val("");
+                                    $("#barcodeBcodeTxt").val("");
+                                    $("#barcodeBcodeTxt").focus();
+                                }
+                                if (selectedScanOption == ScanOption.Continue || selectedScanOption == ScanOption.After) {
+                                    isValidBarcode = false;
+                                    EnableControllers();
+                                }
+                            });
+
+                        }
+                        isScanCompleted = true;
+                        resetControls();
+                        //loadPOcounterValues();
+                        
+                        goodQty = 0;
+                        scrapQty = 0;
+                        reworkQty = 0;
+                    },
+                    error: function (jqXHR, textStatus, errorThrown) {
+                        formatErrorMessage(jqXHR, errorThrown, "CreateBulkBagBarcode");
+                        EnableControllers();
+                    }
+                });
+            }
+        } else {
+            msgBox.show('ක්‍රියාවලියට පෙර කරුණාකර තීරු කේත අංකයක් ඇතුළත් කරන්න.', 'Please enter a bar code number before process.', 'අවවාදයයි / Warning', 'APIERR02', 'Warning', function () {
+                            if (selectedScanOption == ScanOption.After || selectedScanOption == ScanOption.Continue) {
+                                    $("#barcodeQuantityTxt").val("");
+                                    $("#barcodeBcodeTxt").val("");
+                                    $("#barcodeBcodeTxt").focus();
+                                }
+                                if (selectedScanOption == ScanOption.Continue || selectedScanOption == ScanOption.After) {
+                                    isValidBarcode = false;
+                                    EnableControllers();
+                                }
+                            })
+        }
+    }
+
+    function finalizeBarcodeUpdate(data) {
+        $('#scannedStatusDataLabel').removeClass('blinktext');
+        $('#scannedStatusDataLabel').removeClass('control-datalabel-scannedstatus-fail');
+        $('#scannedStatusDataLabel').addClass('control-datalabel-scannedstatus-pass');
+
+        $('#scannedStatusDataLabel').html('Good');
+
+        scannedStatus = ScannedStatus.Pass;
+        scannedCount += 1;
+        $('#scannedCountDataLabel').html(scannedCount);
+
+        if (selectedScanOption == ScanOption.After || selectedScanOption == ScanOption.Continue) {
+            $("#barcodeBcodeTxt").focus();
+        }
+
+        if((new Date()).getHours() == previoushour) {
+            $('#crntHGood').html(parseInt($('#crntHGood').html()) + data.enteredQtyGd);
+            $('#crntHRework').html(parseInt($('#crntHScrap').html()) + data.enteredQtyRw);
+            $('#crntHScrap').html(parseInt($('#crntHRework').html()) + data.enteredQtyScrap);
+        } else {
+            //$('#prevHGood').html($('#crntHGood').html());
+            //$('#prevHRework').html($('#crntHRework').html());
+            //$('#prevHScrap').html($('#crntHScrap').html());
+
+            $('#crntHGood').html(data.enteredQtyGd);
+            $('#crntHRework').html(data.enteredQtyRw);
+            $('#crntHScrap').html(data.enteredQtyScrap);
+
+            previoushour = (new Date()).getHours();
+        }
+
+        $('#totQty').html(data.enteredQtyGd + data.enteredQtyRw + data.enteredQtyScrap);
+
+        $('#dataLabelScanCounter').html(data.scanCount);
+
+        $("#BAGBtnClear").removeAttr("disabled");
+        $('#bagBarcodeBcodeTxt').attr("disabled", "disabled");
+
+        if(data.newCounter) {
+            loadPOcounterValues();
+        }
+
+        if(data.isUpdateAvilable && data.counterId != 0) {
+            updatePOcounterValues(data.counterId);
+        }
+
+        if(selectedWfConfig.poCounterNumber == 0) {
+            loadPOcounterValues();
+        }
+
+        EnableControllers();
+        ScanDataBackup = null;
+    }
+
+    //Counter Window Controllers: START
+    
+    //Changed by NimanthaH
+    function OpenPOCounterPannel(arg) {
+        if(arg != -1){
+            selectedScanCounterId = $('#POCuntID' + arg).text()
+            $('#bagBarcodeBcodeTxt').val($('#BagBarcodeVal' + arg).text());
+            $('#bagSizeTxt').val($('#BagSizeVal' + arg).text());
+            $("#bagBarcodeBcodeTxt").attr("disabled", "disabled");
+            $('#counterNumber').val($('#counterNumber' + arg).text());
+            $("#counterNumber").attr("disabled", "disabled");
+        }
+        else {
+            var cpunterNumber = 1;
+            if(runningPOCounters.length != 0) {
+                cpunterNumber = sortByAttribue(runningPOCounters, "counterNumber")[0].counterNumber;
+            }
+            selectedScanCounterId = "new counter";
+            $("#bagBarcodeBcodeTxt").removeAttr("disabled");
+            $("#counterNumber").removeAttr("disabled");
+            $('#bagBarcodeBcodeTxt').val("");
+            $('#bagSizeTxt').val("");
+            $('#counterNumber').val(parseInt(cpunterNumber) + 1);
+        }
+
+        if (selectedScanCounterId != "") {
+            poCounterResetWindow = $("#poCounterResetWindow").kendoWindow({
+                width: "60%",
+                //height: "64%",
+                title: "Counter Start / Reset",
+                visible: false,
+                actions: [
+                    "Close"
+                ],
+                close: function(e) {
+                    $("#barcodeQuantityTxt").val("");
+                    $("#barcodeBcodeTxt").val("");
+                    resetControls();
+                    EnableInputs();
+                    EnableControllers();
+                    $("#barcodeBcodeTxt").focus();
+                },
+                modal: true,
+                resizable: false,
+                draggable: false,
+                activate: function () {
+                    $("#bagBarcodeBcodeTxt").select();
+                    $("#bagBarcodeBcodeTxt").focus();
+                },
+                pinned: true,
+            }).data("kendoWindow");
+
+            poCounterResetWindow.wrapper.find('.k-window-titlebar').css({
+                'background-color': 'black',
+                'font-size': '18px',
+                'color': 'white'
+            });
+
+            var arrows = [38, 40];
+            poCounterResetWindow.open().center();
+
+            //Declare if any Pass variables
+            if(arg != -1) {
+                $('#CounterID').html(selectedScanCounterId);
+                $('#styleTxt').html($('#Style' + arg).text());
+                $('#sheduleTxt').html($('#Shedule' + arg).text());
+                $('#zFeatureTxt').html($('#ZFeature' + arg).text());
+                $('#poTxt').html($('#PO' + arg).text());
+                $('#colorTxt').html($('#Color' + arg).text());
+                $('#sizeTxt').html($('#Size' + arg).text());
+                $('#cutQuantityTxt').html($('#CutQuantity' + arg).text());
+                $('#currentQuantityTxt').html($('#POCunt' + arg).text());
+                $('#currentQuantityNumber').html($('#POCuntNumber' + arg).text());
+                $("#bagBarcodeBcodeTxt").select();
+            } else {
+                $('#CounterID').html(selectedScanCounterId);
+                $('#styleTxt').html(scannedBarcode.styleNo);
+                $('#sheduleTxt').html(scannedBarcode.scheduleNo);
+                $('#zFeatureTxt').html(scannedBarcode.zfeature);
+                $('#poTxt').html(scannedBarcode.poNo);
+                $('#colorTxt').html(scannedBarcode.colorNo);
+                $('#sizeTxt').html(scannedBarcode.colorNo);
+                $('#cutQuantityTxt').html('-');
+                $('#currentQuantityTxt').html('1');
+                $('#currentQuantityNumber').html('1');
+            }
+            return; 
+        }
+    }
+
+    function DisableInputs() {
+        $("#BAGBtnClear").attr('disabled', 'disabled');
+        $("#BAGBtnReset").attr('disabled', 'disabled');
+
+        $("#POBtnClear").attr('disabled', 'disabled');
+        $("#POBtnReset").attr('disabled', 'disabled');
+    }
+
+    function EnableInputs() {
+        $("#BAGBtnClear").removeAttr('disabled');
+        $("#BAGBtnReset").removeAttr('disabled');
+
+        $("#POBtnClear").removeAttr('disabled');
+        $("#POBtnReset").removeAttr('disabled');
+    }
+    //Counter Window Controllers: END
+
+    function checkForBagBarcodeExistence () {
+        if($('#bagBarcodeBcodeTxt').val() != "" && sacanComplete) {
+            $.ajax({
+                url: '@ViewBag.APIURL/Lookup/CheckForBagBarcode?bagbarcode=' + $('#bagBarcodeBcodeTxt').val() + '&mode=1',
+                type: 'GET',
+                dataType: 'json',
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {
+                    return response.nobarcodes;
+                },
+
+            });
+        }
+    }
+    // Added following function //Nalinda
+    // Defect Operation selection pannel
+    function closeTheBag() {
+         $.ajax({
+            url: '@ViewBag.APIURL/BusinessLogics/UpdatePOCounter?CounterId=' + selectedScanCounterId + '&Action=1&BagSize=' + $("#bagSizeTxt").val() + '&BagBarcode=' + $("#bagBarcodeBcodeTxt").val() + '&WfdepinstId=' + clientconfig.wfdepinstId + '&WFId=' + clientconfig.wfId + '&OperationCode=' + clientconfig.opCode1,
+            type: 'POST',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json; charset=utf-8',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (data) {
+                //console.log('Calling Remove PO Counter API succeded.');
+                if(!data.saveSuccessfull){
+                    msgBox.show('වෙන් කිරීම අසාර්ථක විය.', 'Update failed.', 'අවවාදයයි / Warning', 'BS13', 'Warning', null)
+                }
+
+                if(data.message){
+                    msgBox.show('', data.responce, 'අවවාදයයි / Warning', 'APIERR01', 'Warning', null);
+                }
+
+                loadPOcounterValues();
+                haltsystem = false;
+                if(poCounterResetWindow != null) {
+                    poCounterResetWindow.close();}
+                EnableInputs();
+                
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "CreateBulkBagBarcode");
+            }
+        });
+    }
+
+    function resetTheBag(BagSize, bagbarcode) {
+        //console.log(bagbarcode, BagSize, selectedScanCounterId);
+        $.ajax({
+            url: '@ViewBag.APIURL/BusinessLogics/UpdatePOCounter?CounterId=' + selectedScanCounterId + '&Action=2&BagSize=' + BagSize + '&BagBarcode=' + bagbarcode + '&WfdepinstId=' + clientconfig.wfdepinstId + '&WFId=' + clientconfig.wfId + '&OperationCode=' + clientconfig.opCode1,
+            type: 'POST',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json; charset=utf-8',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                //console.log('Calling Reset PO Counter API succeded.');
+                if(!response.saveSuccessfull){
+                    msgBox.show('වෙන් කිරීම අසාර්ථක විය.', 'Update failed.', 'අවවාදයයි / Warning', 'BS13', 'Warning', null)
+                }
+                    
+                loadPOcounterValues();
+                poCounterResetWindow.close();
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                formatErrorMessage(jqXHR, errorThrown, "CreateBulkBagBarcode");
+            }
+        });
+    }
+
+    function resetToStartUp() {
+        if (selectedScanOption != ScanOption.Non) {
+            if (selectedScanOption == ScanOption.After) {
+                $('#trxModeReworkBtn').removeClass('bs-buttonPressed-rework');
+                $('#trxModeGoodBtn').removeClass('bs-buttonPressed-good');
+                $('#trxModeScrapBtn').removeClass('bs-buttonPressed-scrap');
+                $('#trxModeReworkBtn').addClass('bs-btn-primary-rework');
+                $('#trxModeGoodBtn').addClass('bs-btn-primary-good');
+                $('#trxModeScrapBtn').addClass('bs-btn-primary-scrap');
+                $("#trxModeReworkBtn").attr("disabled", "disabled");
+                $("#trxModeGoodBtn").attr("disabled", "disabled");
+                $("#trxModeScrapBtn").attr("disabled", "disabled");
+
+                $('#scanActionReverseBtn').removeClass('bs-buttonPressed-action');
+                $('#scanActionAddBtn').addClass('bs-buttonPressed-action');
+                $('#scanActionAddBtn').removeClass('bs-btn-primary-action');
+                $('#scanActionReverseBtn').addClass('bs-btn-primary-action');
+
+                $('#divScrapReason').hide();
+                $("#barcodeScrapReasonTxt").val("");
+
+                $("#barcodeBcodeTxt").removeAttr("disabled");
+                $("#barcodeQuantityTxt").removeAttr("disabled");
+                $("#barcodeQuantityTxt").val('');
+                $("#barcodeBcodeTxt").val("");
+                $("#barcodeBcodeTxt").focus();
+
+                selectedTrxMode = TransactionMode.Non;
+                selectedScrapReason = Answer.Null;
+                selectedFunction = Answer.Null;
+                setPageControlsStartupStatus();
+            }
+
+            else if (selectedScanOption == ScanOption.Continue) {
+                $('#trxModeReworkBtn').removeClass('bs-buttonPressed-rework');
+                $('#trxModeGoodBtn').removeClass('bs-buttonPressed-good');
+                $('#trxModeScrapBtn').removeClass('bs-buttonPressed-scrap');
+                $('#trxModeReworkBtn').addClass('bs-btn-primary-rework');
+                $('#trxModeGoodBtn').addClass('bs-btn-primary-good');
+                $('#trxModeScrapBtn').addClass('bs-btn-primary-scrap');
+
+                $('#scanActionReverseBtn').removeClass('bs-buttonPressed-action');
+                $('#scanActionAddBtn').addClass('bs-buttonPressed-action');
+                $('#scanActionAddBtn').removeClass('bs-btn-primary-action');
+                $('#scanActionReverseBtn').addClass('bs-btn-primary-action');
+
+                $('#divScrapReason').hide();
+                $("#barcodeScrapReasonTxt").val("");
+
+                $("#barcodeBcodeTxt").attr("disabled", "disabled");
+                $("#barcodeQuantityTxt").attr("disabled", "disabled");
+                $("#barcodeQuantityTxt").val('disabled');
+                $("#barcodeBcodeTxt").val("");
+                $('#trxModeGoodBtn').focus();
+
+                selectedTrxMode = TransactionMode.Non;
+                selectedScrapReason = Answer.Null;
+                selectedFunction = Answer.Null;
+                setPageControlsStartupStatus();
+            }
+        }
+    }
+
+    function resetControls() {
+        //Scan Option is set to Before but user has not selected Scan Action and the Transaction Mode                 
+        $('#lastAction').html(searchRefractive(selectedScanAction, Action));
+
+        if (selectedScanOption == ScanOption.Before) {
+
+            $('#scanActionReverseBtn').removeClass('bs-buttonPressed-action');
+            $('#scanActionAddBtn').removeClass('bs-buttonPressed-action');
+            $('#scanActionReverseBtn').addClass('bs-btn-primary-action');
+            $('#scanActionAddBtn').addClass('bs-btn-primary-action');
+
+            $("#barcodeBcodeTxt").attr("disabled", "disabled");
+            $("#barcodeQuantityTxt").attr('disabled','disabled');
+            $("#barcodeQuantityTxt").val('disabled');
+            $("#barcodeBcodeTxt").val("");
+
+            selectedFunction = Answer.Null;
+        }
+        else if (selectedScanOption == ScanOption.After) {
+            $('#dataLabelzFeature').html("");
+            $('#bcstyleDataLabel').html("");
+            $('#scheduleDataLabel').html("");
+            $('#bcsizeDataLabel').html("");
+            $('#bcColorDataLabel').html("");
+            $('#remainingQtyLabel').html("");        
+
+            $('#scanActionReverseBtn').removeClass('bs-buttonPressed-action');
+            $('#scanActionAddBtn').addClass('bs-buttonPressed-action');
+            $('#scanActionAddBtn').removeClass('bs-btn-primary-action');
+            $('#scanActionReverseBtn').addClass('bs-btn-primary-action');
+
+            $("#barcodeBcodeTxt").removeAttr("disabled");
+            $("#barcodeQuantityTxt").removeAttr('disabled');
+            $("#barcodeQuantityTxt").val('');
+            $("#barcodeBcodeTxt").val("");
+
+            isValidBarcode = false;
+            selectedFunction = Answer.Null;
+
+            selectActionAdd();
+        }
+        else if (selectedScanOption == ScanOption.Continue) {
+            if (!isScanCompleted) {
+                $('#dataLabelzFeature').html("");
+                $('#bcstyleDataLabel').html("");
+                $('#scheduleDataLabel').html("");
+                $('#bcsizeDataLabel').html("");
+                $('#bcColorDataLabel').html("");
+                $('#remainingQtyLabel').html("");        
+
+            }
+
+            isValidBarcode = false;
+
+            $("#barcodeBcodeTxt").removeAttr("disabled");
+            $("#barcodeQuantityTxt").removeAttr('disabled');
+            $("#barcodeQuantityTxt").val('');
+            $("#barcodeBcodeTxt").val("");
+            $("#barcodeBcodeTxt").focus();
+        }
+
+        isScanCompleted = false;
+
+    } 
+
+    function GetClientByWF(arg){    
+        refreshmsgBoxHeaderStyle();
+        if (wfid != null){ 
+                $.ajax({
+                url: '@ViewBag.APIURL/Security/GetClientByWfIdandIP?clientIP=' + clientconfig.clientIP + '&wfid=' + wfid + '&clientId=' + clientconfig.clientId,
+                type: 'GET',
+                dataType: 'json',
+                async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {
+                  if (response != null) {
+                       var temwfdepinstId = clientconfig.wfdepinstId;
+
+                        clientconfig = {
+                                "clientId": response.clientId,
+                                "dataCaptureMode": response.dataCaptureMode,
+                                "facName": response.facName,
+                                "loginMode": response.loginMode,
+                                "opCode1": response.opCode1,
+                                "opCode2": response.opCode2,
+                                "operationName": response.operationName,
+                                "recStatus": response.recStatus,
+                                "selectMode": response.selectMode,
+                                "teamId": response.teamId,
+                                "teamName": response.teamName,
+                                "facName": response.facName,
+                                "wfdepinstId": response.wfdepinstId,
+                                "wfId": wfid,
+                                "clientIP": clientconfig.clientIP
+                            };   
+                           
+ 
+                            if (clientconfig.teamId == 0 || clientconfig.teamId == null) {
+                                setMainOperationVisibility();
+                            }
+
+                            if(temwfdepinstId !=  clientconfig.wfdepinstId) {
+                                 refresValuesonChangeSize();
+                            }
+
+                            setClientConfigInfo();
+                        }   
+                       else{
+                           
+
+                            msgBox.show('කාර්ය ප්‍රවාහයට අවසර නැත. කරුණාකර තොරතුරු තාක්ෂණ නිලධාරියෙකු අමතන්න.',
+                                    'Client is not configured for this Workflow..WFID = '+ wfid + ' Please contact a IT helpdesk officer' ,
+                                    'අවවාදයයි / Warning',
+                                    'BS22',
+                                    'Warning',
+                                    null);
+                            $("#barcodeBcodeTxt").val("");
+                            $("#barcodeBcodeTxt").focus();
+                            
+                            sacanComplete = false;
+                            errorbeforestauscomplete = errorbeforestauscomplete + ' ' + 'Client is not configured for this Workflow..WFID'
+                            return;
+                        }          
+                    },
+                     error: function (jqXHR, textStatus, errorThrown) {
+                    formatErrorMessage(jqXHR, errorThrown, "CreateBulkBagBarcode");
+                     }
+                });   
+        }   
+    }
+
+    function refreshmsgBoxHeaderStyle() {
+        $('#msgWindow').removeClass("msgWindowWarning");
+        $('#msgWindow').removeClass("msgWindowConfirm");
+    } //console.log(selectedScrapReason);
+    
+    function operationChange(arg) {
+        
+        var oppcodeTeamcode = $("#ddlMainOperation").val();
+        var operationText = $("#ddlMainOperation").data("kendoDropDownList").text();
+        if (oppcodeTeamcode != null && oppcodeTeamcode != "") {
+            var operation = oppcodeTeamcode.split('-');
+
+            if (operation.length > 1) {
+
+                var OppCode = operation[0].substring(operation[0].indexOf("[") + 1, operation[0].indexOf("]"));
+                var TeamId = operation[1].substring(operation[1].indexOf("[") + 1, operation[1].indexOf("]"));
+
+                // operation[operation.length - 1];
+                // TeamId = TeamId.replace(/\[/g, '');               
+                // TeamId = TeamId.replace(/\]/g, '');
+                // var TeamName = operation[1]; 
+                // var OppCode = operation[operation.length - 2];
+                // OppCode = OppCode.replace(/\[/g, '');               
+                // OppCode = OppCode.replace(/\]/g, '');       $.ajax({                
+
+                //getWFDEPInstId();
+
+                //url: 'http://localhost:5001/api/Security/GetWfDEPInstByClientWF?ClientId=' +  clientconfig.clientId + '&WFId=' + clientconfig.wfId,
+
+                $.ajax({
+                    url: '@ViewBag.APIURL/Security/GetWfDEPInstByTeamOppWF?TeamId=' + TeamId + '&OppCode=' + OppCode + '&WFId=' + clientconfig.wfId,
+
+                    type: 'GET',
+                    dataType: 'json',
+                    async: false,
+                    contentType: 'application/json',
+                    beforeSend: function () {
+                        $("#ajaxBusy").show();
+                    },
+                    complete: function () {
+                        $("#ajaxBusy").hide();
+                    },
+                    success: function (response) {
+                        if (response != null) {
+                            WFDEPInstId = response.wfdepinstId;
+                           
+                            var operationNames = operationText.split('-');
+
+                            if (operationNames.length > 1) {
+                                var OppName = operationNames[0]
+                                var TeamName = operationNames[1]
+
+                                var clientconfigTemp = {
+                                    "clientId": clientconfig.clientId,
+                                    "dataCaptureMode": clientconfig.dataCaptureMode,
+                                    "pocounterNumber" : clientconfig.pocounterNumber,
+                                    "facName": clientconfig.facName,
+                                    "loginMode": clientconfig.loginMode,
+                                    "opCode1": OppCode,
+                                    "opCode2": 0,
+                                    "operationName": OppName,
+                                    "recStatus": clientconfig.recStatus,
+                                    "selectMode": clientconfig.selectMode,
+                                    "teamId": TeamId,
+                                    "teamName": TeamName,
+                                    "wfdepinstId": WFDEPInstId,
+                                    "wfId": clientconfig.wfId,
+                                    "clientIP": clientconfig.clientIP
+                                };
+
+                                clientconfig = null;
+
+                                clientconfig = clientconfigTemp
+                                setClientConfigInfo();
+                            }
+
+
+                        }
+                    },
+                })
+            }
+
+
+            // $('#dataLabelOperation').html(operation[0]);
+        }
+    }
+
+ 
+    function getWFDEPInstId(arg) {
+         $.ajax({
+                //url: '@ViewBag.APIURL/Security/GetWfDEPInstByClientWF?ClientId=' +  clientconfig.clientId + '&WFId=' + clientconfig.wfId,
+                url: '@ViewBag.APIURL/Security/GetWfDEPInstByTeamOppWF?TeamId=' +  TeamId + '&OppCode=' + clientconfig.OppCode + '&WFId=' + clientconfig.wfId ,
+                
+                type: 'GET',
+                dataType: 'json',
+                async: false,
+                contentType: 'application/json',
+                beforeSend: function () {
+                    $("#ajaxBusy").show();
+                },
+                complete: function () {
+                    $("#ajaxBusy").hide();
+                },
+                success: function (response) {
+                    if (response != null) {
+                        WFDEPInstId =response.wfdepinstId;
+                }   
+            },
+        });
+    }
+
+    //Counter Controllers
+    function loadPOcounterValues() {
+        $('#pocounterdiv').hide();
+        refreshmsgBoxHeaderStyle();
+        //console.log("pocounterNumber load po counter: ", clientconfig.pocounterNumber);
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetPOcounterValuesNonApperal?WFDEPInstId=' + selectedWfConfig.wfdepinstId,
+            type: 'GET',
+            dataType: 'json',
+            //async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                //Modifed by NimanthaH
+                runningPOCounters = [];
+                if(response.length != 0) {
+                    runningPOCounters = response;
+                    var result = "";
+                    $("#counerlabelDetails").html('');  
+                    $.each(response, function (id, counter) {
+                        
+                        if(selectedWfConfig.poCounterNumber == 1){
+                            if(counter.qty01 >= counter.bagSize){
+                                msgBox.show(counter.scheduleNo + ' - ' + counter.colorDesc + ' (' + counter.counterId + ') කවුන්ටරය පිරී ඇත. කරුණාකර බෑගය වහන්න.',
+                                'The counter is full. Please close the bag.','අවවාදයයි / Warning', 'LG03','Warning',null);
+                                haltsystem = true; //halt the system 
+                            }
+                        }
+
+                        result += '<td id="ctd' + (counter.counterId) + '" style="height: 84px;">'+
+                                    '<div id="cou' + (counter.counterId) + '" class="col-xs-1 cell">'+
+                                        '<table id="counter' + counter.counterId + '">'+
+                                            '<tbody>' +
+                                                '<tr id= "poCounterNumberDiv">' + 
+                                                    '<td class="counter-td counter-round">' +
+                                                        '<button class="counter-key-button" type="button" id="POBtn' + counter.counterId + '-key" onClick="OpenPOCounterPannel(' + (counter.counterId) + ')" title="Open Counter Window">' +
+                                                        '<span id="counterNumber' + (counter.counterId+1) + '" class="counter-key">' + counter.bagBarCode + '</span>' +
+                                                    '</td>' +
+                                                '</tr>' +
+                                                '<tr>' +
+                                                    '<td class="counter-td counter-round">' +
+                                                        '<button type="button" id="POBtn' + counter.counterId + '" class="btn btn-primary control-label_PO" onClick="OpenPOCounterPannel(' + (counter.counterId) + ')" title="Open Counter Window"">' +
+                                                        '<span id="Style' + (counter.counterId) + '" class="buttonTxt" hidden="hidden">' + counter.styleNo + '</span>' +
+                                                        '<span id="PO' + (counter.counterId) + '" class="buttonTxt" hidden="hidden">' + counter.poNo + '</span>' +
+                                                        '<span id="ZFeature' + (counter.counterId) + '" class="buttonTxt" hidden="hidden">' + counter.zfeature + '</span>' +
+                                                        '<span id="Shedule' + (counter.counterId) + '" class="buttonTxt">' + counter.scheduleNo + '</span>' +
+                                                        '<span id="Separater"> : </span>' +
+                                                        '<span id="Color' + (counter.counterId) + '" class="buttonTxt">' + counter.colorDesc + '</span>' +
+                                                        '<span id="Separater"> : </span>' +
+                                                        '<span id="Size' + (counter.counterId) + '" class="buttonTxt">' + counter.sizeDesc + '</span>' +
+                                                        '</button>' +
+                                                    '</td>' +
+                                                '</tr>' +
+                                                '<tr>' +
+                                                    '<td class="counter-td counter-round">' +
+                                                        '<label id="POCunt' + (counter.counterId) + '" class="control-po_counter" style="width: 100%;">' + counter.qty01 + (selectedWfConfig.poCounterNumber == 1 ? ' / ' + counter.bagSize : '') + '</label> ' +
+                                                        '<label id="POCuntNumber' + (counter.counterId) + '" class="cutqty" style="width: 100%;" hidden="hidden">' + counter.qty01 + '</label> ' +
+                                                        (selectedWfConfig.poCounterNumber == 1 ? '<label id="CutQuantity' + (counter.counterId) + '" class="cutqty" style="width: 100%;">' + counter.cutQuantity + '</label> ' : '<label id="CutQuantity' + (counter.counterId) + '" class="cutqty" style="width: 100%;" hidden="hidden">' + counter.cutQuantity + '</label> ') +
+                                                        '<label id="POCuntID' + (counter.counterId) + '" style="width: 0%;" hidden="hidden">' + counter.counterId + '</label> ' +
+                                                        '<label id="BagBarcodeVal' + (counter.counterId) + '" style="width: 0%;" hidden="hidden">' + counter.bagBarCode + '</label> ' +
+                                                        '<label id="BagSizeVal' + (counter.counterId) + '" style="width: 0%;" hidden="hidden">' + counter.bagSize + '</label> ' +
+                                                    '</td>' +
+                                                '</tr>' +
+                                            '</tbody>' +
+                                        '</table>' +
+                                    '</div>' +
+                                '</td>'
+                    });
+                    $("#counerlabelDetails").html(result);
+                    $('#pocounterdiv').show();
+                    focousPOcounterValues();
+                } else {
+                    $("#counerlabelDetails").html('');
+                    $('#pocounterdiv').hide();
+                }
+            },
+
+        });
+    }
+
+    function updatePOcounterValues(counterId) {
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetUpdatedPOcounterValues?WFDEPInstId=' + selectedWfConfig.wfdepinstId + '&CounterId=' + counterId,
+            type: 'GET',
+            dataType: 'json',
+            async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                //console.log(response);
+                if(response == undefined) {
+                    loadPOcounterValues();
+                } else {
+                    if(response != null) {
+                        if(selectedWfConfig.poCounterNumber == 1){
+                            if(response.qty01 >= response.bagSize){
+                                msgBox.show(response.bagBarCode + ' (' + response.counterId + ') කවුන්ටරය පිරී ඇත. කරුණාකර බෑගය වහන්න.',
+                                'The counter is full. Please close the bag.','අවවාදයයි / Warning', 'LG03','Warning',null);
+                                haltsystem = true; //halt the system 
+                            }
+                        }
+
+                        $("#POCunt" + response.counterId).html(response.qty01 + ' / ' + response.bagSize);
+                        $("#CutQuantity" + response.counterId).html(response.cutQuantity);
+                        $("#BagSizeVal" + response.counterId).html(response.bagSize);
+                        $("#POCuntNumber" + response.counterId).html(response.qty01);
+
+                        if(lastUpdatedCounterId != response.counterId) {
+                            $("id, #POBtn" + lastUpdatedCounterId).removeClass('active');
+                            $("id, #POBtn" + lastUpdatedCounterId + "-key").removeClass('active-c');
+
+                            $("id, #POBtn" + response.counterId).addClass('active');
+                            $("id, #POBtn" + response.counterId + "-key").addClass('active-c');
+                            $("#POBtn" + response.counterId).focus();
+
+                            lastUpdatedCounterId = response.counterId;
+                        }
+
+                        $("#barcodeBcodeTxt").focus();
+                    } else {
+                        loadPOcounterValues();
+                        msgBox.show(counter.scheduleNo + ' - ' + counter.colorDesc + ' (' + counter.counterId + ') කවුන්ටරය යාවත්කාලීන කිරීම අසාර්ථක විය. (GetUpdatedPOcounterValues ​​API මඟින් ශුන්‍ය අගයක් ලබා දෙයි).',
+                                'counter update failed. (GetUpdatedPOcounterValues API returns null value).','අවවාදයයි / Warning', 'LG03','Warning',null);
+                    }
+                }
+            },
+        });
+    }
+
+    //Added by NimanthaH
+    function focousPOcounterValues() {
+        $.ajax({
+            url: '@ViewBag.APIURL/Lookup/GetMostUpdatedPOcounter?WFDEPInstId=' + selectedWfConfig.wfdepinstId,
+            type: 'GET',
+            dataType: 'json',
+            async: false,
+            contentType: 'application/json',
+            beforeSend: function () {
+                $("#ajaxBusy").show();
+            },
+            complete: function () {
+                $("#ajaxBusy").hide();
+            },
+            success: function (response) {
+                //console.log(response);
+                if(response != null) {
+                    //if(lastUpdatedCounterId != response.counterId) {
+                        $("#POBtn" + response.counterId).focus();
+                        $("id, #POBtn" + response.counterId).addClass('active');
+                        $("id, #POBtn" + response.counterId + "-key").addClass('active-c');
+                        $("#barcodeBcodeTxt").focus();
+                        lastUpdatedCounterId = response.counterId;
+                    //}
+                }
+            },
+
+        });
+    }
+
+    function beep(vol, freq, duration){
+                v=a.createOscillator()
+                u=a.createGain()
+                v.connect(u)
+                v.frequency.value=freq
+                v.type="square"
+                u.connect(a.destination)
+                u.gain.value=vol*0.01
+                v.start(a.currentTime)
+                v.stop(a.currentTime+duration*0.001)
+    }
+
+    function beeponce() {   
+        var snd = new Audio("data:audio/wav;base64,//uQRAAAAWMSLwUIYAAsYkXgoQwAEaYLWfkWgAI0wWs/ItAAAGDgYtAgAyN+QWaAAihwMWm4G8QQRDiMcCBcH3Cc+CDv/7xA4Tvh9Rz/y8QADBwMWgQAZG/ILNAARQ4GLTcDeIIIhxGOBAuD7hOfBB3/94gcJ3w+o5/5eIAIAAAVwWgQAVQ2ORaIQwEMAJiDg95G4nQL7mQVWI6GwRcfsZAcsKkJvxgxEjzFUgfHoSQ9Qq7KNwqHwuB13MA4a1q/DmBrHgPcmjiGoh//EwC5nGPEmS4RcfkVKOhJf+WOgoxJclFz3kgn//dBA+ya1GhurNn8zb//9NNutNuhz31f////9vt///z+IdAEAAAK4LQIAKobHItEIYCGAExBwe8jcToF9zIKrEdDYIuP2MgOWFSE34wYiR5iqQPj0JIeoVdlG4VD4XA67mAcNa1fhzA1jwHuTRxDUQ//iYBczjHiTJcIuPyKlHQkv/LHQUYkuSi57yQT//uggfZNajQ3Vmz+Zt//+mm3Wm3Q576v////+32///5/EOgAAADVghQAAAAA//uQZAUAB1WI0PZugAAAAAoQwAAAEk3nRd2qAAAAACiDgAAAAAAABCqEEQRLCgwpBGMlJkIz8jKhGvj4k6jzRnqasNKIeoh5gI7BJaC1A1AoNBjJgbyApVS4IDlZgDU5WUAxEKDNmmALHzZp0Fkz1FMTmGFl1FMEyodIavcCAUHDWrKAIA4aa2oCgILEBupZgHvAhEBcZ6joQBxS76AgccrFlczBvKLC0QI2cBoCFvfTDAo7eoOQInqDPBtvrDEZBNYN5xwNwxQRfw8ZQ5wQVLvO8OYU+mHvFLlDh05Mdg7BT6YrRPpCBznMB2r//xKJjyyOh+cImr2/4doscwD6neZjuZR4AgAABYAAAABy1xcdQtxYBYYZdifkUDgzzXaXn98Z0oi9ILU5mBjFANmRwlVJ3/6jYDAmxaiDG3/6xjQQCCKkRb/6kg/wW+kSJ5//rLobkLSiKmqP/0ikJuDaSaSf/6JiLYLEYnW/+kXg1WRVJL/9EmQ1YZIsv/6Qzwy5qk7/+tEU0nkls3/zIUMPKNX/6yZLf+kFgAfgGyLFAUwY//uQZAUABcd5UiNPVXAAAApAAAAAE0VZQKw9ISAAACgAAAAAVQIygIElVrFkBS+Jhi+EAuu+lKAkYUEIsmEAEoMeDmCETMvfSHTGkF5RWH7kz/ESHWPAq/kcCRhqBtMdokPdM7vil7RG98A2sc7zO6ZvTdM7pmOUAZTnJW+NXxqmd41dqJ6mLTXxrPpnV8avaIf5SvL7pndPvPpndJR9Kuu8fePvuiuhorgWjp7Mf/PRjxcFCPDkW31srioCExivv9lcwKEaHsf/7ow2Fl1T/9RkXgEhYElAoCLFtMArxwivDJJ+bR1HTKJdlEoTELCIqgEwVGSQ+hIm0NbK8WXcTEI0UPoa2NbG4y2K00JEWbZavJXkYaqo9CRHS55FcZTjKEk3NKoCYUnSQ0rWxrZbFKbKIhOKPZe1cJKzZSaQrIyULHDZmV5K4xySsDRKWOruanGtjLJXFEmwaIbDLX0hIPBUQPVFVkQkDoUNfSoDgQGKPekoxeGzA4DUvnn4bxzcZrtJyipKfPNy5w+9lnXwgqsiyHNeSVpemw4bWb9psYeq//uQZBoABQt4yMVxYAIAAAkQoAAAHvYpL5m6AAgAACXDAAAAD59jblTirQe9upFsmZbpMudy7Lz1X1DYsxOOSWpfPqNX2WqktK0DMvuGwlbNj44TleLPQ+Gsfb+GOWOKJoIrWb3cIMeeON6lz2umTqMXV8Mj30yWPpjoSa9ujK8SyeJP5y5mOW1D6hvLepeveEAEDo0mgCRClOEgANv3B9a6fikgUSu/DmAMATrGx7nng5p5iimPNZsfQLYB2sDLIkzRKZOHGAaUyDcpFBSLG9MCQALgAIgQs2YunOszLSAyQYPVC2YdGGeHD2dTdJk1pAHGAWDjnkcLKFymS3RQZTInzySoBwMG0QueC3gMsCEYxUqlrcxK6k1LQQcsmyYeQPdC2YfuGPASCBkcVMQQqpVJshui1tkXQJQV0OXGAZMXSOEEBRirXbVRQW7ugq7IM7rPWSZyDlM3IuNEkxzCOJ0ny2ThNkyRai1b6ev//3dzNGzNb//4uAvHT5sURcZCFcuKLhOFs8mLAAEAt4UWAAIABAAAAAB4qbHo0tIjVkUU//uQZAwABfSFz3ZqQAAAAAngwAAAE1HjMp2qAAAAACZDgAAAD5UkTE1UgZEUExqYynN1qZvqIOREEFmBcJQkwdxiFtw0qEOkGYfRDifBui9MQg4QAHAqWtAWHoCxu1Yf4VfWLPIM2mHDFsbQEVGwyqQoQcwnfHeIkNt9YnkiaS1oizycqJrx4KOQjahZxWbcZgztj2c49nKmkId44S71j0c8eV9yDK6uPRzx5X18eDvjvQ6yKo9ZSS6l//8elePK/Lf//IInrOF/FvDoADYAGBMGb7FtErm5MXMlmPAJQVgWta7Zx2go+8xJ0UiCb8LHHdftWyLJE0QIAIsI+UbXu67dZMjmgDGCGl1H+vpF4NSDckSIkk7Vd+sxEhBQMRU8j/12UIRhzSaUdQ+rQU5kGeFxm+hb1oh6pWWmv3uvmReDl0UnvtapVaIzo1jZbf/pD6ElLqSX+rUmOQNpJFa/r+sa4e/pBlAABoAAAAA3CUgShLdGIxsY7AUABPRrgCABdDuQ5GC7DqPQCgbbJUAoRSUj+NIEig0YfyWUho1VBBBA//uQZB4ABZx5zfMakeAAAAmwAAAAF5F3P0w9GtAAACfAAAAAwLhMDmAYWMgVEG1U0FIGCBgXBXAtfMH10000EEEEEECUBYln03TTTdNBDZopopYvrTTdNa325mImNg3TTPV9q3pmY0xoO6bv3r00y+IDGid/9aaaZTGMuj9mpu9Mpio1dXrr5HERTZSmqU36A3CumzN/9Robv/Xx4v9ijkSRSNLQhAWumap82WRSBUqXStV/YcS+XVLnSS+WLDroqArFkMEsAS+eWmrUzrO0oEmE40RlMZ5+ODIkAyKAGUwZ3mVKmcamcJnMW26MRPgUw6j+LkhyHGVGYjSUUKNpuJUQoOIAyDvEyG8S5yfK6dhZc0Tx1KI/gviKL6qvvFs1+bWtaz58uUNnryq6kt5RzOCkPWlVqVX2a/EEBUdU1KrXLf40GoiiFXK///qpoiDXrOgqDR38JB0bw7SoL+ZB9o1RCkQjQ2CBYZKd/+VJxZRRZlqSkKiws0WFxUyCwsKiMy7hUVFhIaCrNQsKkTIsLivwKKigsj8XYlwt/WKi2N4d//uQRCSAAjURNIHpMZBGYiaQPSYyAAABLAAAAAAAACWAAAAApUF/Mg+0aohSIRobBAsMlO//Kk4soosy1JSFRYWaLC4qZBYWFRGZdwqKiwkNBVmoWFSJkWFxX4FFRQWR+LsS4W/rFRb/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////VEFHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAU291bmRib3kuZGUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMjAwNGh0dHA6Ly93d3cuc291bmRib3kuZGUAAAAAAAAAACU=");       
+            snd.play(); 
+    }
+
+    //Disable Enabale Barcode Scan Textbox
+    function DisableControllers() {
+        $("#barcodeBcodeTxt").attr('disabled', 'disabled');
+        $("#barcodeQuantityTxt").attr('disabled', 'disabled');
+    }
+
+    function EnableControllers() {
+        $("#barcodeQuantityTxt").removeAttr('disabled');
+        $("#barcodeBcodeTxt").removeAttr('disabled');
+        $("#barcodeBcodeTxt").focus();
+    }
+
+</script>
+
+<!-- Main Window: START -->
+<div class="form-group" id="main">    
+    <div class="row">
+        <div class="col-xs-6" style="width: 47%; /*border-radius: 15px; border: #ffffff63 solid 2px; top: 10px; box-shadow: 6px 7px 5px #00000075;*/">
+            <div class="row" id="dvMainOpp"> 
+                <label class="col-xs-2 control-label control-label-main" style="width: 34%;">Operation :</label> 
+                <div class="col-md-6">
+                    <div id="ddlMainOperation" class="form-control" style="width: 120%;"></div>
+                </div>
+                <div class="col-md-2"></div>
+            </div>
+            <div class="row">
+                <label class="col-xs-2 control-label control-label-main" style="width: 22%;">Style :</label>
+                <div class="col-xs-3">
+                    <input type="text" id="barcodeStyleTxt" class="form-control" style="height: 44px;" placeholder="Select Style" readonly>
+                </div>
+                <div class="col-xs-1">
+                    <button type="button" id="styleSearchBtn" class="btn btn-primary searchButton" style="margin-left: 15px; margin-top: 19px;" title="Style Search">
+                        <span><i class="fas fa-search"></i></span>                            
+                    </button>
+                </div>
+                <div class="col-xs-5">
+                    <label class="control-datalabel control-datalabel-search" id="styleDataLabel" ></label>
+                </div>
+            </div>            
+            <div class="row">
+                <label class="col-xs-2 control-label control-label-main" style="width: 22%;">Shedule :</label>
+                <div class="col-xs-3">
+                    <input type="text" id="barcodeSheduleTxt" class="form-control" placeholder="Select Shedule" style="height: 44px;" readonly>
+                </div>
+                <div class="col-xs-1">
+                    <button type="button" id="sheduleSearchBtn" class="btn btn-primary searchButton" style="margin-left: 15px; margin-top: 19px;" title="Shedule Search">
+                        <span><i class="fas fa-search"></i></span>                            
+                    </button>
+                </div>
+                <div class="col-xs-5">
+                    <label class="control-datalabel control-datalabel-search" id="sheduleDataLabel" ></label>                               
+                </div>                               
+            </div>
+            <div class="row">
+                <label class="col-xs-2 control-label control-label-main" style="width: 22%;">Color :</label>
+                <div class="col-xs-3">
+                    <input type="text" id="barcodeColorTxt" class="form-control" placeholder="Select Color" style="height: 44px;" readonly>
+                </div>
+                <div class="col-xs-1">
+                    <button type="button" id="colorSearchBtn" class="btn btn-primary searchButton" style="margin-left: 15px; margin-top: 19px;" title="Color Search">
+                        <span><i class="fas fa-search"></i></span>                            
+                    </button>
+                </div>
+                <div class="col-xs-5">
+                    <label class="control-datalabel control-datalabel-search" id="colorDataLabel" ></label>                               
+                </div>                               
+            </div> 
+            <div class="row">
+                <label class="col-xs-2 control-label control-label-main" style="width: 22%;">Size :</label>
+                <div class="col-xs-3">
+                    <input type="text" id="barcodeSizeTxt" class="form-control" placeholder="Select Size" style="height: 44px;" readonly>
+                </div>
+                <div class="col-xs-1">
+                    <button type="button" id="sizeSearchBtn" class="btn btn-primary searchButton" style="margin-left: 15px; margin-top: 19px;" title="Size Search">
+                        <span><i class="fas fa-search"></i></span>                            
+                    </button>
+                </div>
+                <div class="col-xs-5">
+                    <label class="control-datalabel control-datalabel-search" id="sizeDataLabel" ></label>                               
+                </div>                               
+            </div>          
+            <div class="row">
+                <label class="col-xs-2 control-label control-label-main" style="width: 22%;">Barcode & Quantity :</label>
+                <div class="col-xs-7">
+                    <input type="textarea" id="barcodeBcodeTxt" class="form-control textbox-barcode-a" maxlength="11" placeholder="Scan Barcode">
+                </div>
+                <div class="col-xs-2">
+                    <input type="textarea" id="barcodeQuantityTxt" class="form-control textbox-barcode-a" maxlength="3" placeholder="Qty">
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-xs-2"></div>
+                <div class="col-xs-3"></div>
+                <div class="col-xs-4"></div>
+            </div>
+            <div class="row" id="scanActionButton">
+                <label class="col-xs-2 control-label control-label-main" style="width: 22%;">Action :</label>
+                <div class="col-xs-5">                    
+                    <div class="roundCornerGroupBox roundCornerGroupBox_BC roundCornerGroupBox_BC_Ac">
+                        <label class="control-label-submitbtn">
+                            <button type="button" id="scanActionAddBtn" class="btn bs-btn-primary-action submitButton" title="Add">
+                                <span>Add</span>                            
+                            </button>
+                        </label>                                                
+                        <label class="control-label-submitbtn">
+                            <button type="button" id="scanActionReverseBtn" class="btn bs-btn-primary-action submitButton" style="margin-right: 12px;" title="Reverse">
+                                <span>Reverse</span>                            
+                            </button>
+                        </label>                                            
+                    </div>  
+                </div>
+                <div class="col-xs-4" style="padding-top: 18px">
+                    <label class="control-label-submitbtn" style="padding-top: 8px !important;">
+                            <div class="row">
+                        <button type="button" id="resetBtn" class="btn btn-primary submitButton" title="Reset" style="width: 26%; padding-top: 17px;">
+                            <span>Reset</span>                            
+                        </button>
+                        </div>
+                    </label>                  
+                </div>        
+            </div>                  
+        </div>
+
+        <div class="col-xs-6" style="width: 53%;">
+            <div class="bc_rightcontent">
+                <div class="row">
+                    <div class="col-xs-12">
+                        <div class="row roundCornerGroupBox" style="margin-right: 3px;">
+                            <div class="row" style="margin-top: 8px;">                               
+                                <label class="control-scan-status" style="padding-left: 0px;width: 14%;">Barcode :</label>               
+                                <label class="control-scan-status-val" style="padding-left: 0px;width: 17%;" id="lastBarcodeDataLabel" ></label>
+                                
+                                <label class="control-scan-status" style="padding-left: 0px;width: 9%;">Action :</label>               
+                                <label class="control-scan-status-val" style="padding-left: 0px;width: 8%;" id="lastAction" ></label>
+                                
+                                <label class="control-scan-status" style="padding-left: 0px;width: 10%; margin-left: 102px;">Tot Qty :</label>               
+                                <label class="control-scan-status-val" style="padding-left: 0px;width:5%;" id="totQty" >0</label>                                                
+                            </div>
+                            <div class="row">
+                                <div class="col-xs-4">
+                                    <!--<div class="row" style="text-align: center !important;">
+                                        <label class="control-label">Scanned Status</label>
+                                    </div>-->
+                                    <div class="row" style="text-align: center !important;"> <!--height:10vh; Modified by NimanthaH-->
+                                        <label class="control-datalabel-scannedstatus-fail blinktext" id="scannedStatusDataLabel"></label>
+                                    </div>                      
+                                </div>
+                                 <div class="col-xs-8">    
+                                    <div class="row" style="text-align: center !important;">
+                                        <label class="control-label" style="text-align:left; margin-left: 164px; margin-top: 13px;">Created Count (current)</label>
+                                    </div>                                          
+                                    <!--<div class="row" style="text-align: center !important; visibility: hidden;">
+                                        <label class="control-label" style="width: 20%; text-align:left;">Previous hr.</label>
+                                        <label class="bs-lbl-counter-good bs-lbl-counter"  id="prevHGood">0</label>
+                                        <label class="bs-lbl-counter-scrap bs-lbl-counter" id="prevHScrap">0</label> 
+                                        <label class="bs-lbl-counter-rework bs-lbl-counter" id="prevHRework">0</label>
+                                    </div> -->
+                                    <div class="row" style="text-align: center !important; margin-bottom: 20px;"> 
+                                        <!--<label class="control-label" style="width: 20%; text-align:left;"></label>-->
+                                        <label class="bs-lbl-counter-good bs-lbl-counter" style="margin-left: 15px;" id="crntHGood">0</label>
+                                        <label class="bs-lbl-counter-scrap bs-lbl-counter" id="crntHScrap" hidden="hidden">0</label>
+                                        <label class="bs-lbl-counter-rework bs-lbl-counter" id="crntHRework" hidden="hidden">0</label>
+                                    </div>
+                                    <div class="row" style="text-align: center !important; height: 10px;"></div>                                                                
+                                </div>                                                  
+                            </div>                                                             
+                        </div>
+                    </div>                                                  
+                </div>
+                <div class="row" style="padding-right: 15px;">
+                    <div class="col-xs-12">                    
+                        <div class="row  roundCornerGroupBox" style="height:25vh;">                            
+                            <div class="col-xs-7" style="padding-left: 0px;">                                 
+                                <div class="row" style="height:7vh; overflow: auto;">                                                         
+                                    <label class="control-label col-xs-3">Style :</label>               
+                                    <label class="bcInfoDataLabel col-xs-8" id="bcstyleDataLabel" ></label>                                        
+                                </div>                                 
+                                <div class="row" style="height:7vh; overflow: auto;">
+                                    <label class="control-label col-xs-3">PO & Z Fture. :</label>               
+                                    <label class="bcInfoDataLabel col-xs-8" id="dataLabelzFeature" ></label>                    
+                                </div>
+                                <div class="row" style="height:7vh; overflow: auto;">
+                                    <label class="control-label col-xs-3">Color :</label>               
+                                    <label class="bcInfoDataLabel col-xs-8" id="bcColorDataLabel" ></label>                                   
+                                </div> 
+                            </div>
+                            <div class="col-xs-5" style="padding-left: 0px;">
+                                <div class="row" style="height:7vh; overflow: auto;">                                                    
+                                    <label class="control-label col-xs-4" style="padding-left: 0px;">Size :</label>               
+                                    <label class="bcInfoDataLabel col-xs-3" style="width:140px;" id="bcsizeDataLabel" ></label>
+                                </div>
+                                <div class="row" style="height:7vh; overflow: auto;">             
+                                    <label class="control-label col-xs-4" style="padding-left: 0px;">Schedule :</label>               
+                                    <label class="bcInfoDataLabel col-xs-3" id="scheduleDataLabel" ></label>
+                                </div>  
+                                <div class="row" style="height:7vh; overflow: auto;">           
+                                    <label class="control-label col-xs-4" style="padding-left: 0px; width:155px;">Remaining Qty</label>               
+                                    <label class="bcInfoDataLabel col-xs-3" id="remainingQtyLabel" ></label>
+                                </div>                       
+                            </div>                                
+                        </div>                            
+                    </div>                   
+                </div>
+                <div class="row" style="padding-right: 15px;">
+                    <div class="col-xs-12">
+                        <div class="row roundCornerGroupBox">
+                            <div class="col-xs-6" style="padding-left: 0px;">
+                                <div class="row">                   
+                                    <label class="control-label col-xs-4" style= "width: 30%" >Factory :</label>
+                                    <label class="control-datalabel col-xs-6 pad-remove-loclables" id="dataLabelFactory" ></label>            
+                                </div>  
+                                <div class="row">                    
+                                    <label class="control-label col-xs-4" style= "width: 30%">Team :</label>
+                                    <label class="control-datalabel col-xs-6 pad-remove-loclables" id="dataLabelTeam" ></label>
+                                </div>
+                                <div class="row" style="padding-bottom: 10px;">                    
+                                    <label class="control-label col-xs-4" style= "width: 34%">Operation :</label>
+                                    <label class="control-datalabel col-xs-6 pad-remove-loclables" id="dataLabelOperation" ></label>
+                                </div>                    
+                            </div>
+                            <div class="col-xs-6" style="padding-left: 0px;">
+                                <div class="row">                                
+                                    <div class="col-xs-7" >                                                       
+                                        <label class="counterlbl" id="dataLabelScanCounter" >0</label>
+                                    </div> 
+                                    <div class="col-xs-5" >
+                                        <button type="button" id="resetCounterBtn" class="btn btn-primary submitButton" title="Reset" style="width: 26%; padding-top: 17px; margin-top: 27px;">
+                                            <span>Reset</span>                            
+                                        </button>
+                                    </div> 
+                                <!--     
+
+                                <div class="row">                    
+                                    <label class="control-label col-xs-4">Client IP :</label>
+                                    <label class="control-datalabel col-xs-6"id="dataLabelClientIP" ></label>
+                                </div> 
+                                <div class="row">                    
+                                    <label class="control-label col-xs-4">Scan Opt :</label>
+                                    <label class="control-datalabel col-xs-6"id="dataLabelScanOpt" ></label>
+                                </div> 
+                                
+                                -->
+                                </div>
+                            </div>                                                                   
+                        </div>
+                    </div>
+                    <div class="col-xs-6">
+                        <div class="row roundCornerGroupBox" style="height: 25vh;" hidden="hidden">                            
+                            <div class="row" style="text-align:center;">                   
+                                <label class="control-label">Accessible Functions</label>                                    
+                            </div>
+                            <div id="userpermissionlist" style="height: 12vh; overflow-y: scroll;">
+
+                            </div>                                                    
+                        </div>
+                    </div> 
+                </div>          
+            </div>        
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-xs-5">
+            <label class="bc-funckey-help">F5-Add</label> 
+            <label class="bc-funckey-help">F6-Reverse</label>
+        </div>                        
+    </div>
+
+    <div class="row" class="m-2"></div>
+
+    <div class="row" class="m-2" style="margin-right: 15px;" id="pocounterdiv">
+        <div id="counterLables" class="roundCornerGroupBox_Scrolabale" hidden="hidden" style="padding-bottom: 12px; display: initial;" >
+            <div class="row col-md-12 roundCornerGroupBox_PO_Counter" style="width: 99.7% !important; overflow-y: hidden; overflow-x: auto;">
+                <table style="margin-top: 6px; margin-bottom: 16px;">
+                    <tbody>
+                        <tr id="counerlabelDetails" class="scrolable-field"></tr>
+                    </tbody>
+                </table>
+            </div>     
+        </div>
+    </div>
+
+    <div class="row" class="m-2"></div> 
+</div>
+<!-- MAIN WINDOW: END-->
+
+<!-- STYLE SEARCH WINDOW: START-->
+<div id="styleSearchWindow" class="styleSearchWindow" hidden="hidden">
+    <input type="text" class="form-control" placeholder="Enter Style" id="styleSearchWindowStyleTxt" style="width:25%">
+    <br>
+    <div id="styleSearchGrid">
+</div>
+<!-- STYLE SEARCH WINDOW: END-->
+
+<!-- SHEDULE SEARCH WINDOW: START-->
+<div id="sheduleSearchWindow" class="colorSearchWindow" hidden="hidden">
+    <input type="text" class="form-control" placeholder="Enter Shedule" id="sheduleSearchWindowStyleTxt" style="width:25%">
+    <br>
+    <div id="sheduleSearchGrid">
+</div>
+<!-- SHEDULE SEARCH WINDOW: END-->
+
+<!-- COLOR SEARCH WINDOW: START-->
+<div id="colorSearchWindow" class="colorSearchWindow" hidden="hidden">
+    <input type="text" class="form-control" placeholder="Enter Color" id="colorSearchWindowColorTxt" style="width:25%">
+    <br>
+    <div id="colorSearchGrid">
+    </div>
+</div>
+<!-- COLOR SEARCH WINDOW: END-->
+
+<!-- SHEDULE SEARCH WINDOW: START-->
+<div id="sizeSearchWindow" class="colorSearchWindow" hidden="hidden">
+    <input type="text" class="form-control" placeholder="Enter Size" id="sizeSearchWindowStyleTxt" style="width:25%">
+    <br>
+    <div id="sizeSearchGrid">
+</div>
+<!-- SHEDULE SEARCH WINDOW: END-->
+
+<!-- PO COUNTER POPUP WINDOW: START-->
+<div id="poCounterResetWindow" class="scrapReasonSearchWindow" hidden="hidden">
+    <!--Added by NimantaH-->
+    <div class="row" style="margin-right: 0px !important;">
+        <table style="width: 100%" class="table table-po">
+            <thead>
+                <tr>
+                    <th style="text-align: left" colspan="2" class="th-p">Bag Barcode Counter</th>
+                    <th style="text-align: right" class="th-p">Counter ID :</th>
+                    <th style="text-align: left"><label id="CounterID" class="th-r"></label></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr hidden="hidden">
+                    <td style="text-align: right" class="td-p">Counter Number:</td>
+                    <td style="text-align: left" colspan="3" class="td-r"><input type="textarea" id="counterNumber" class="is-valid form-control-t" style="width: 45px; font-size: 30px;" placeholder="Enter Counter Number" style="width: 60px;"></td>
+                </tr>
+                <tr>
+                    <td style="text-align: right" class="td-p">Style :</td>
+                    <td colspan="3" id="styleTxt" style="text-align: left" class="td-r"></td>
+                </tr>
+                <tr>
+                    <td style="text-align: right" class="td-p">Shedule :</td>
+                    <td colspan="3" id="sheduleTxt" style="text-align: left" class="td-r"></td>
+                </tr>
+                <tr>
+                    <td style="text-align: right" class="td-p">PO :</td>
+                    <td colspan="3" id="poTxt" style="text-align: left" class="td-r"></td>
+                </tr>
+                <tr>
+                    <td style="text-align: right" class="td-p">Z-Feature :</td>
+                    <td colspan="3" id="zFeatureTxt" style="text-align: left" class="td-r"></td>
+                </tr>
+                <tr>
+                    <td style="text-align: right" class="td-p">Color :</td>
+                    <td colspan="3" style="text-align: left" class="td-r"><label id="colorTxt"></td>
+                </tr>
+                <tr>
+                    <td style="text-align: right" class="td-p">Size :</td>
+                    <td colspan="3" style="text-align: left" class="td-r"><label id="sizeTxt"></td>
+                </tr>
+                <tr id="bagbarcode-row">
+                    <td style="text-align: right" class="td-p">Bag Barcode :</td>
+                    <td style="text-align: left" colspan="3" class="td-r">
+                        <input type="textarea" id="bagBarcodeBcodeTxt" class="is-valid form-control-t" placeholder="Scan bag barcode" style="font-size: 30px; width: 305px;" autofocus>
+                    </td>
+                </tr>
+                <tr id="bagqty-row">
+                    <td style="text-align: right" class="td-p">Bag Quantity :</td>
+                    <td style="text-align: left" colspan="3" class="td-r"><input type="textarea" id="bagSizeTxt" class="is-valid form-control-t" placeholder="Nos" style="width: 60px;"></td>
+                </tr>
+                <tr>
+                    <td style="text-align: right" class="td-p"><label>Current Quantity :</label><label id="currentQuantityNumber" hidden="hidden"></label></td>
+                    <td colspan="3" id="currentQuantityTxt" style="text-align: left" class="td-r"></td>
+                </tr>
+                <tr>
+                    <td style="text-align: right" class="td-p">WIP :</td>
+                    <td colspan="3" id="cutQuantityTxt" style="text-align: left" class="td-r"></td>
+                </tr>
+            </tbody>
+        </table>
+        <table style="width: 100%" class="table table-po" id="bagcounter-action-buttons">
+            <tbody>
+                <tr>
+                    <td colspan="2" style="text-align: center">
+                        <button type="button" id="BAGBtnClear" class="m-2 btn btn-danger width-button" title="Remove" style="font-size: 30px; font-weight: 600;">
+                        <span>Close the Bag</span>
+                    </td>
+                    <td colspan="2" style="text-align: center">
+                        <button type="button" id="BAGBtnReset" class="m-2 btn btn-success width-button" title="Done" style="font-size: 30px; font-weight: 600;">
+                        <span>Save</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2" style="text-align: center">
+                        <label Style="text-align: center;">බෑගය ඉවත් කිරීමට.</label>
+                    </td>
+                    <td colspan="2" style="text-align: center">
+                        <label Style="text-align: center;">බෑග් තීරු කේත විස්තර සුරකින්න.</label>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <table style="width: 100%" class="table table-po" id="pocounter-action-buttons">
+            <tbody>
+                <tr>
+                    <td colspan="2" style="text-align: center">
+                        <button type="button" id="POBtnClear" class="m-2 btn btn-danger width-button" title="Remove Counter" style="font-size: 30px; font-weight: 600;">
+                        <span>Remove Counter</span>
+                    </td>
+                    <td colspan="2" style="text-align: center">
+                        <button type="button" id="POBtnReset" class="m-2 btn btn-success width-button" title="Reset Counter" style="font-size: 30px; font-weight: 600;">
+                        <span>Reset Counter</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2" style="text-align: center">
+                        <label Style="text-align: center;">කවුන්ටරය ඉවත් කරන්න.</label>
+                    </td>
+                    <td colspan="2" style="text-align: center">
+                        <label Style="text-align: center;">කවුන්ටරය 0 වෙත නැවත සකසන්න.</label>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+<!-- PO COUNTER POPUP WINDOW: END-->
+
+<!--Page Styles: START-->
+<Style>
+    /* Scroll Bar */
+    /* width */
+    ::-webkit-scrollbar {
+    width: 10px;
+    height: 15px;
+    margin-bottom: 7px;
+    }
+
+    /* Track */
+    ::-webkit-scrollbar-track {
+    background: #49505700;
+    }
+    
+    /* Handle */
+    ::-webkit-scrollbar-thumb {
+    background: #888; 
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    border-bottom-left-radius: 8px;
+    }
+
+    /* Handle on hover */
+    ::-webkit-scrollbar-thumb:hover {
+    background: #555; 
+    }
+</Style>
+<!--Page Styles: END-->
